@@ -8,18 +8,71 @@
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 
+
 use spin::Mutex;
 
 use crate::kernel::cpu as cpu;
 use crate::devices::key as key;
 use crate::devices::key::Key;
 use crate::kernel::cpu::IoPort;
+use nolock::queues::mpmc;
+use nolock::queues::mpmc::bounded::scq::{Receiver, Sender};
+
+/// Global keyboard instance.
+pub static KEYBOARD: Mutex<Keyboard> = Mutex::new(Keyboard::new());
+
+/// Global key buffer.
+/// Each key is pushed to this queue by the interrupt handler
+/// and can be retrieved at a later time by the user.
+/// Wrapped inside a Once, because the Queue cannot be created inside a const function.
+static KEYBOARD_BUFFER: Once<KeyQueue> = Once::new();
+
+/// Global access to the key buffer.
+/// Usage: let key_buffer = keyboard::get_key_buffer();
+///        let key = key_buffer.get_last_key();
+pub fn get_key_buffer() -> &'static KeyQueue {
+    KEYBOARD_BUFFER.call_once(|| {
+        KeyQueue::new()
+    })
+}
+
+/* ╔═════════════════════════════════════════════════════════════════════════╗
+   ║ Interrupt service routine implementation.                               ║
+   ╚═════════════════════════════════════════════════════════════════════════╝ */
+
+/// Register the keyboard interrupt handler.
+pub fn plugin() {
+
+    /* Hier muss Code eingefuegt werden */
+
+}
+
+/// The keyboard interrupt service routine.
+pub struct KeyboardISR {}
+
+impl ISR for KeyboardISR {
+    fn trigger(&self) {
+
+        /* Hier muss Code eingefuegt werden */
+
+    }
+}
+
 
 /// Global thread-safe access to keyboard.
 /// Usage: let mut keyboard = keyboard::KEYBOARD.lock();
 ///        let key = keyboard.key_hit();
 pub static KEYBOARD: Mutex<Keyboard> = Mutex::new(Keyboard::new());
 
+/// Represents a first in first out queue for keyboard keys.
+/// It uses a multi-producer multi-consumer queue from the nolock crate,
+/// allowing thread safe access without needing a Mutex.
+pub struct KeyQueue {
+    /// Keys can be popped from the queue via the receiver.
+    receiver: Receiver<Key>,
+    /// Keys can be pushed to the queue via the sender.
+    sender: Sender<Key>
+}
 /// Represents the keyboard.
 pub struct Keyboard {
     code: u8,       // Keyboard byte
@@ -59,29 +112,80 @@ static ALT_TAB: [u8; 89] =
         0, 0, 0, 0, 124, 0, 0
     ];
 
+static SCAN_NUM_TAB: [u8; 13] = [  8, 9, 10, 53, 5, 6, 7, 27, 2, 3, 4, 11, 51 ];
+impl KeyQueue {
+    /// Create a new empty queue.
+    /// Unfortunately, this cannot be done in a const function.
+    fn new() -> KeyQueue {
+        let (receiver, sender) = mpmc::bounded::scq::queue(128);
+        KeyQueue { receiver, sender }
+    }
+
+
+    /// Push a key to the queue.
+    /// If the queue is full, the key is silently discarded.
+    pub fn push_key(&self, key: Key) {
+        if self.receiver.is_closed() {
+            // Should never haven
+            panic!("KeyQueue is closed!");
+        }
 static ASC_NUM_TAB:[u8; 13] = [ 55, 56, 57, 45, 52, 53, 54, 43, 49, 50, 51, 48, 44 ];
 
-static SCAN_NUM_TAB: [u8; 13] = [  8, 9, 10, 53, 5, 6, 7, 27, 2, 3, 4, 11, 51 ];
+        // Enqueue the key into the queue.
+        // If the queue is full, we ignore the key.
+        self.sender.try_enqueue(key).ok();
+    }
 
+
+    /// Pop a key from the queue.
+    /// If the queue is empty, None is returned.
+    pub fn get_last_key(&self) -> Option<Key> {
+        if self.receiver.is_closed() {
+            // Should never haven
+            panic!("KeyQueue is closed!");
+        }
 // LED names
 const LED_CAPS_LOCK: u8 = 4;
 const LED_NUM_LOCK: u8 = 2;
 const LED_SCROLL_LOCK: u8 = 1;
 
+        match self.receiver.try_dequeue() {
+            Ok(key) => Some(key),
+            Err(_) => None
+        }
+    }
 // Constants needed for key decoding
 const BREAK_BIT: u8 = 0x80;
 const PREFIX1: u8   = 0xe0;
 const PREFIX2:u8    = 0xe1;
 
+    /// Pop a key from the queue.
+    /// If the queue is empty, the function blocks until a key is available.
+    pub fn wait_for_key(&self) -> Key {
+        if self.receiver.is_closed() {
+            // Should never haven
+            panic!("KeyQueue is closed!");
+        }
 // Keyboard IO-ports
 const KBD_CTRL_PORT:u16 = 0x64;    // Status- (R) u. Steuerregister (W)
 const KBD_DATA_PORT:u16 = 0x60;    // Ausgabe- (R) u. Eingabepuffer (W)
 
+        loop {
+            match self.receiver.try_dequeue() {
+                Ok(key) => return key,
+                Err(_) => {}
+            }
+        }
+    }
+}
 // Bits in the keyboard status register
 const KBD_OUTB: u8 = 0x01;
 const KBD_INPB: u8 = 0x02;
 const KBD_AUXB: u8 = 0x20;
 
+/* ╔═════════════════════════════════════════════════════════════════════════╗
+   ║ Implementation of the keyboard driver itself.                           ║
+   ╚═════════════════════════════════════════════════════════════════════════╝ */
 // Keyboard commands
 const KBD_CMD_SET_LED: u8 = 0xed;
 const KBD_CMD_SET_SPEED: u8 = 0xf3;
@@ -91,6 +195,7 @@ const KBD_CMD_CPU_RESET: u8 = 0xfe;
 const KBD_REPLY_ACK:u8 = 0xfa;
 
 impl Keyboard {
+    /// Poll a byte from the keyboard controller.
     pub const fn new() -> Keyboard {
         Keyboard {
             code: 0,
@@ -101,7 +206,7 @@ impl Keyboard {
             data_port: IoPort::new(KBD_DATA_PORT)
         }
     }
-    
+
     /// Interpret the make and break codes of the keyboard.
     /// Return true if the key is complete, false if codes are missing.
     fn key_decoded(&mut self) -> bool {
@@ -138,7 +243,7 @@ impl Keyboard {
             self.prefix = 0;
             return false;
         }
-        
+
         // A key has been pressed. For the modifier keys like SHIFT, ALT, NUM_LOCK etc.
         // only the internal state is changed. The return value 'false' indicates
         // that the keyboard input is not yet complete. For the other keys, ASCII
@@ -245,7 +350,7 @@ impl Keyboard {
             self.gather.set_scancode(self.code);
         }
     }
-    
+
     /// Poll the keyboard controller until a key is pressed.
     /// Decode and return the key if it is complete.
     pub fn key_hit(&mut self) -> Key {
@@ -261,12 +366,20 @@ impl Keyboard {
         // unreachable, but required by Rust
         // invalid
     }
-    
+    /// Poll a byte from the keyboard controller.
+    /// Decode and return the key if it is complete.
+    fn key_hit_irq(&mut self) -> Option<Key> {
+
+        /* Hier muss Code eingefuegt werden */
+
+        None
+    }
+
     /// Set the repeat rate of the keyboard (determined by the speed and delay).
-    /// 
+    ///
     /// The speed determines how fast repeated keys are sent.
     /// Valid values are between 0 (very fast) and 31 (very slow).
-    /// 
+    ///
     /// The delay determines how long a key must be pressed before the keyboard starts repeating it.
     /// Valid values are between 0 (minimum delay) and 3 (maximum delay).
     /// 0 = 250ms, 1 = 500ms, 2 = 750ms, 3 = 1000ms
@@ -303,7 +416,7 @@ impl Keyboard {
          *                  Bits 4-3 = B; Bits 2-0 = D;                              *
          *****************************************************************************/
     }
-    
+
     /// Enable/Disable the LEDs on the keyboard.
     /// Multiple LEDs can be set at the same time as a bit mask.
     /// 1 = Caps Lock, 2 = Num Lock, 4 = Scroll Lock
