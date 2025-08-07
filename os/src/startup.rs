@@ -43,19 +43,46 @@ fn aufgabe1() {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn startup() {
-    kprintln!("Welcome to hhuTOS!");
-    
     cga::CGA.lock().clear();
+    kprintln!("Welcome to hhuTOS!");
     aufgabe1();
     println!("Test der Zahlenausgabenfunktion:");
+    println!("");
     println!("dex    hex   bin");
     for i in 0..=16 {
         println!("{:3}   0x{:02x}  {:04b}", i, i, i);
     }
+    println!("");
+    println!("Tastatur mit beliebigen Eingaben testen:");
+    println!("");
+    loop {
+        let key = keyboard::KEYBOARD.lock().key_hit();
+        if key.valid() {
+            let asc = key.get_ascii();
+            if asc == 8 { // Backspace
+                let mut cga = cga::CGA.lock();
+                let (mut x, mut y) = cga.getpos();
+                if x > 0 || y > 0 {
+                    if x == 0 {
+                        x = 79;
+                        if y > 0 { y -= 1; }
+                    } else {
+                        x -= 1;
+                    }
+                    cga.setpos(x, y);
+                    cga.show(x, y, ' ', cga::CGA_STD_ATTR);
+                    cga.setpos(x, y);
+                }
+            }
+            else if asc != 0 && (asc.is_ascii_graphic() || asc == b' ') {
+                print!("{}", asc as char);
+            }
+        }
+    }
 
-
-    loop{}
 }
+
+
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

@@ -249,31 +249,17 @@ impl Keyboard {
     /// Poll the keyboard controller until a key is pressed.
     /// Decode and return the key if it is complete.
     pub fn key_hit(&mut self) -> Key {
-        let invalid: Key = Default::default();  // nicht explizit initialisierte Tasten sind ungueltig
-
-        /* Hier muss Code eingefuegt werden. */
-
-        /*****************************************************************************
-         * Funktion:        key_hit                                                  *
-         *---------------------------------------------------------------------------*
-         * Beschreibung:    Diese Methode soll einen Tastendruck zurueckliefern.     *
-         *                  Hierzu soll die Tastatur in einer Schleife "gepollt"     *
-         *                  werden, bis ein Zeichen eingegebn wurde.                 *
-         *                                                                           *
-         *                  Das Byte von der Tastatur soll in dem Attribut 'code'    *
-         *                  (siehe Keyboard.h) gespeichert werden. Die Dekodierung   *
-         *                  soll mithilfe der vorgegebenen Funktion 'key_decoded'    *
-         *                  erfolgen.                                                *
-         *                                                                           *
-         * Rückgabewert:    Wenn der Tastendruck abgeschlossen ist und ein Scancode, *
-         *                  sowie gegebenenfalls ein ASCII-Code emittelt werden      *
-         *                  konnte, werden diese in 'gather' (siehe Keyboard.h)      *
-         *                  zurueckgeliefert. Anderenfalls liefert key_hit () einen  *
-         *                  ungueltigen Wert zurueck, was mit Key::valid ()          *
-         *                  ueberprueft werden kann.                                 *
-         *****************************************************************************/
-
-        invalid
+        let invalid: Key = Default::default();
+        loop {
+            // Wait until output buffer is full (data available)
+            while unsafe { self.control_port.inb() } & KBD_OUTB == 0 {}
+            self.code = unsafe { self.data_port.inb() };
+            if self.key_decoded() {
+                return self.gather;
+            }
+        }
+        // unreachable, but required by Rust
+        // invalid
     }
     
     /// Set the repeat rate of the keyboard (determined by the speed and delay).
@@ -287,7 +273,17 @@ impl Keyboard {
     pub fn set_repeat_rate(&mut self, speed: u8, delay: u8) {
 
         /* Hier muss Code eingefuegt werden. */
-
+        let value = ((delay & 0x3) << 5) | (speed & 0x1F);
+        // Wait until input buffer is empty
+        while unsafe { self.control_port.inb() } & KBD_INPB != 0 {}
+        unsafe { self.data_port.outb(KBD_CMD_SET_SPEED); }
+        // Wait for ACK
+        while unsafe { self.data_port.inb() } != KBD_REPLY_ACK {}
+        // Wait until input buffer is empty
+        while unsafe { self.control_port.inb() } & KBD_INPB != 0 {}
+        unsafe { self.data_port.outb(value); }
+        // Wait for ACK
+        while unsafe { self.data_port.inb() } != KBD_REPLY_ACK {}
         /*****************************************************************************
          * Funkion:         set_repeat_rate                                          *
          *---------------------------------------------------------------------------*
@@ -314,7 +310,21 @@ impl Keyboard {
     pub fn set_led(&mut self, led: u8, on: bool) {
 
         /* Hier muss Code eingefuegt werden. */
-        
+        if on {
+            self.leds |= led;
+        } else {
+            self.leds &= !led;
+        }
+        // Wait until input buffer is empty
+        while unsafe { self.control_port.inb() } & KBD_INPB != 0 {}
+        unsafe { self.data_port.outb(KBD_CMD_SET_LED); }
+        // Wait for ACK
+        while unsafe { self.data_port.inb() } != KBD_REPLY_ACK {}
+        // Wait until input buffer is empty
+        while unsafe { self.control_port.inb() } & KBD_INPB != 0 {}
+        unsafe { self.data_port.outb(self.leds); }
+        // Wait for ACK
+        while unsafe { self.data_port.inb() } != KBD_REPLY_ACK {}
         /*****************************************************************************
          * Funktion:        set_led                                                  *
          *---------------------------------------------------------------------------*
