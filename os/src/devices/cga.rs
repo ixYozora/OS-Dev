@@ -65,6 +65,16 @@ impl CGA {
     /// Clear CGA screen and set cursor position to (0, 0).
     pub fn clear(&mut self) {
         /* Hier muss Code eingefuegt werden */
+        for y in 0..CGA_ROWS {
+            for x in 0..CGA_COLUMNS {
+                let pos = (y * CGA_COLUMNS + x) * 2;
+                unsafe {
+                    CGA_BASE_ADDR.offset(pos as isize).write(b' ');
+                    CGA_BASE_ADDR.offset((pos + 1) as isize).write(CGA_STD_ATTR);
+                }
+            }
+        }
+        self.setpos(0, 0);
     }
 
     /// Display the `character` at the given position `x`,`y` with attribute `attrib`.
@@ -89,23 +99,94 @@ impl CGA {
     /// Return cursor position `x`,`y`
     pub fn getpos(&mut self) -> (usize, usize) {
         /* Hier muss Code eingefuegt werden */
+        unsafe {
+            self.index_port.outb(CGA_HIGH_BYTE_CMD);
+        }
+        let high = unsafe {
+            self.data_port.inb()
+        };
 
-        (0, 0) // Platzhalter, entfernen und durch sinnvollen Rueckgabewert ersetzen 
+        // Select low byte
+        unsafe {
+            self.index_port.outb(CGA_LOW_BYTE_CMD);
+        }
+        let low = unsafe {
+            self.data_port.inb()
+        };
+
+        let pos = ((high as u16) << 8) | (low as u16);
+        let x = (pos as usize) % CGA_COLUMNS;
+        let y = (pos as usize) / CGA_COLUMNS;
+        (x, y) // Platzhalter, entfernen und durch sinnvollen Rueckgabewert ersetzen
     }
 
     /// Set cursor position `x`,`y` 
     pub fn setpos(&mut self, x: usize, y: usize) {
         /* Hier muss Code eingefuegt werden */
+        let pos = (y * CGA_COLUMNS + x) as u16;
+        let high = (pos >> 8) as u8;
+        let low = (pos & 0xFF) as u8;
+
+        unsafe {
+            self.index_port.outb(CGA_HIGH_BYTE_CMD);
+            self.data_port.outb(high);
+            self.index_port.outb(CGA_LOW_BYTE_CMD);
+            self.data_port.outb(low);
+        }
     }
 
     /// Print byte `b` at actual position cursor position `x`,`y`
     pub fn print_byte(&mut self, b: u8) {
         /* Hier muss Code eingefuegt werden */
+        let (mut x, mut y) = self.getpos();
+
+        match b {
+            b'\n' => {
+                x = 0;
+                y += 1;
+            }
+            byte => {
+                self.show(x, y, byte as char, CGA_STD_ATTR);
+                x += 1;
+                if x >= CGA_COLUMNS {
+                    x = 0;
+                    y += 1;
+                }
+            }
+        }
+
+        if y >= CGA_ROWS {
+            self.scrollup();
+            y = CGA_ROWS - 1;
+        }
+
+        self.setpos(x, y);
     }
 
     /// Scroll text lines by one to the top.
     pub fn scrollup(&mut self) {
         /* Hier muss Code eingefuegt werden */
+        // Move each line up by one
+        for y in 1..CGA_ROWS {
+            for x in 0..CGA_COLUMNS {
+                let from = ((y * CGA_COLUMNS + x) * 2) as isize;
+                let to = (((y - 1) * CGA_COLUMNS + x) * 2) as isize;
+                unsafe {
+                    let ch = CGA_BASE_ADDR.offset(from).read();
+                    let attr = CGA_BASE_ADDR.offset(from + 1).read();
+                    CGA_BASE_ADDR.offset(to).write(ch);
+                    CGA_BASE_ADDR.offset(to + 1).write(attr);
+                }
+            }
+        }
+        // Clear the last line
+        for x in 0..CGA_COLUMNS {
+            let pos = ((CGA_ROWS - 1) * CGA_COLUMNS + x) * 2;
+            unsafe {
+                CGA_BASE_ADDR.offset(pos as isize).write(b' ');
+                CGA_BASE_ADDR.offset((pos + 1) as isize).write(CGA_STD_ATTR);
+            }
+        }
     }
 
     /// Helper function returning an attribute byte for the given parameters `bg`, `fg`, and `blink`
@@ -113,7 +194,10 @@ impl CGA {
     ///       Support for blinking characters is optional and can be removed, if you want.
     pub fn attribute(&mut self, bg: Color, fg: Color, blink: bool) -> u8 {
         /* Hier muss Code eingefuegt werden */
-
-        0 // Platzhalter, entfernen und durch sinnvollen Rueckgabewert ersetzen 
+        let mut attr = ((bg as u8) << 4) | (fg as u8);
+        if blink {
+            attr |= 0x80;
+        }
+        attr
     }
 }

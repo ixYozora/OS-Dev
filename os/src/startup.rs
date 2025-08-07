@@ -37,7 +37,7 @@ use user::aufgabe1::keyboard_demo;
 
 fn aufgabe1() {
     text_demo::run();
-    println!("");
+    // println!("");
     keyboard_demo::run();
 }
 
@@ -46,9 +46,14 @@ pub extern "C" fn startup() {
     kprintln!("Welcome to hhuTOS!");
     
     cga::CGA.lock().clear();
-    
     aufgabe1();
-    
+    println!("Test der Zahlenausgabenfunktion:");
+    println!("dex    hex   bin");
+    for i in 0..=16 {
+        println!("{:3}   0x{:02x}  {:04b}", i, i, i);
+    }
+
+
     loop{}
 }
 
