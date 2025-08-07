@@ -30,22 +30,28 @@ use devices::cga; // shortcut for cga
 use devices::cga_print; // used to import code needed by println! 
 use devices::keyboard; // shortcut for keyboard
 
+use kernel::allocator;
 use kernel::cpu;
-
 use user::aufgabe1::text_demo;
 use user::aufgabe1::keyboard_demo;
+use user::aufgabe2::heap_demo;
 
 fn aufgabe1() {
     text_demo::run();
     // println!("");
     keyboard_demo::run();
 }
+fn aufgabe2() {
+    heap_demo::run();
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn startup() {
+    allocator::init();
     cga::CGA.lock().clear();
     kprintln!("Welcome to hhuTOS!");
     aufgabe1();
+    aufgabe2();
     println!("Test der Zahlenausgabenfunktion:");
     println!("");
     println!("dex    hex   bin");

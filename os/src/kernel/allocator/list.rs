@@ -65,6 +65,12 @@ impl LinkedListAllocator {
     pub unsafe fn init(&mut self) {
 
         /* Hier muss Code eingefuegt werden */
+        let start = self.heap_start;
+        let size = self.heap_end - self.heap_start;
+        self.head.next = None;
+        unsafe {
+            self.add_free_block(start, size);
+        }
 
     }
 
@@ -72,21 +78,43 @@ impl LinkedListAllocator {
     unsafe fn add_free_block(&mut self, addr: usize, size: usize) {
 
         /* Hier muss Code eingefuegt werden */
-
+        unsafe {
+            let node = addr as *mut ListNode;
+            (*node).size = size;
+            (*node).next = self.head.next.take();
+            self.head.next = Some(&mut *node);
+        }
     }
 
     /// Search a free block with the given size and alignment and remove it from the list.
     fn find_free_block(&mut self, size: usize, align: usize) -> Option<&'static mut ListNode> {
 
         /* Hier muss Code eingefuegt werden */
-
+        let mut current = &mut self.head;
+        while let Some(ref mut node) = current.next {
+            let alloc_start = super::align_up(node.start_addr() + mem::size_of::<ListNode>(), align);
+            let alloc_end = alloc_start.checked_add(size)?;
+            if alloc_end <= node.end_addr() {
+                let mut found = current.next.take();
+                current.next = found.as_mut().unwrap().next.take();
+                return found;
+            }
+            current = current.next.as_mut().unwrap();
+        }
+        None
     }
 
     /// Check if the given block is large enough for an allocation with `size` and `align`.
     fn check_block_for_alloc(block: &ListNode, size: usize, align: usize) -> Result<(),()> {
 
         /* Hier muss Code eingefuegt werden */
-
+        let alloc_start = super::align_up(block.start_addr() + size_of::<ListNode>(), align);
+        let alloc_end = alloc_start.checked_add(size).ok_or(())?;
+        if alloc_end <= block.end_addr() {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     /// Adjust the given layout so that the resulting allocated memory
@@ -105,23 +133,54 @@ impl LinkedListAllocator {
     pub fn dump_free_list(&mut self) {
 
         /* Hier muss Code eingefuegt werden */
-
+        let mut current = &self.head.next;
+        kprintln!("Free list:");
+        while let Some(node) = current {
+            kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
+            current = &node.next;
+        }
     }
 
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        kprint!("list-alloc: size={}, align={}", layout.size(), layout.align());
 
         /* Hier muss Code eingefuegt werden */
-
+        kprint!("list-alloc: size={}, align={}", layout.size(), layout.align());
+        let (size, align) = Self::size_align(layout);
+        let mut prev = &mut self.head;
+        while let Some(ref mut node) = prev.next {
+            let alloc_start = super::align_up(node.start_addr() + mem::size_of::<ListNode>(), align);
+            let alloc_end = alloc_start.checked_add(size).unwrap();
+            if alloc_end <= node.end_addr() {
+                let excess_size = node.end_addr() - alloc_end;
+                let split = excess_size > mem::size_of::<ListNode>();
+                let result = alloc_start as *mut u8;
+                // Save next pointer and node address before dropping the borrow
+                let node_next = node.next.take();
+                let node_addr = node.start_addr();
+                // If splitting, save info for later
+                prev.next = node_next; // Drop the borrow to node here
+                if split {
+                    unsafe {
+                        self.add_free_block(alloc_end, excess_size);
+                    }
+                    // Now, update the size of the original node (which is no longer in the list)
+                    let node_ptr = node_addr as *mut ListNode;
+                    unsafe {
+                        (*node_ptr).size = alloc_start - node_addr;
+                    }
+                }
+                return result;
+            }
+            prev = prev.next.as_mut().unwrap();
+        }
+        ptr::null_mut()
     }
 
     pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        kprintln!("list-dealloc: size={}, align={}; not supported", layout.size(), layout.align());
-
-        let (size, _) = LinkedListAllocator::size_align(layout);
-
+        /* Hier muss Code eingefuegt werden */
+        let (size, _) = Self::size_align(layout);
         unsafe {
-            self.add_free_block(ptr as usize, size)
+            self.add_free_block(ptr as usize, size);
         }
     }
 

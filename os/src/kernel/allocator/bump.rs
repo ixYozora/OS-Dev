@@ -37,16 +37,29 @@ impl BumpAllocator {
 
     /// Dump free memory for debugging purposes.
     pub fn dump_free_list(&mut self) {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let free_memory = self.heap_end - self.next;
+        kprintln!("Bump allocator: {} bytes allocated, {} bytes free",
+                         self.next - self.heap_start, 
+                         free_memory);
     }
 
     /// Allocate memory of the given size and alignment.
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        // Align the current address according to the layout's alignment
+        let alloc_start = super::align_up(self.next, layout.align());
+        let alloc_end = match alloc_start.checked_add(layout.size()) {
+            Some(end) => end,
+            None => return ptr::null_mut(), // Overflow occurred
+        };
 
-        /* Hier muss Code eingefuegt werden */
-
+        // Check if we have enough memory
+        if alloc_end > self.heap_end {
+            ptr::null_mut() // Out of memory
+        } else {
+            self.next = alloc_end;
+            self.allocations += 1;
+            alloc_start as *mut u8
+        }
     }
 
     /// Deallocate memory (not supported by bump allocator).
