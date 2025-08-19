@@ -73,13 +73,18 @@ pub static INT_VECTORS: Mutex<IntVectors> = Mutex::new(IntVectors::new());
 /// The main interrupt dispatcher.
 /// Every interrupt is routed here, if not specified otherwise in the IDT.
 pub fn int_disp(vector: u8, stack_frame: InterruptStackFrame, error_code: Option<u64>) {
-    // Print interrupt information using kprintln!
-    kprintln!("int_disp: Interrupt {}!", vector);
-    
-    // Call report to handle the interrupt if an ISR is registered
+    if vector != 32{
+        kprintln!("int_disp: interrupt: {}", vector);
+    }
     INT_VECTORS.lock().report(vector);
-    
-    return;
+    if vector >= 32  {
+        if vector >= 40 {
+            let mut port = cpu::IoPort::new(0xA0);
+            unsafe {port.outb(0x20);}
+        }
+        let mut port2 = cpu::IoPort::new(0xA0);
+        unsafe {port2.outb(0x20);}
+    }
 }
 
 /// The Interrupt vector map. Each ISR is registered in this map.
@@ -115,45 +120,41 @@ impl IntVectors {
     /// Interrupts get disabled while registering the ISR to avoid race conditions with int_disp().
     pub fn register(&mut self, vector: InterruptVector, isr: Box<dyn ISR>) {
         // Disable interrupts while registering the ISR
-        let int_enabled = cpu::is_int_enabled();
-        if int_enabled {
-            cpu::disable_int();
-        }
+        let int_enabled = cpu::disable_int_nested();
+        let idx = vector as usize;
+        if idx >= IDT_SIZE {
+            panic!("ISR vector out of range for: {}", idx);
 
-        // Register the ISR
-        let vector_num = vector as usize;
-        self.map[vector_num] = Some(isr);
-
-        // Restore interrupt state
-        if int_enabled {
-            cpu::enable_int();
         }
+        if self.map[idx].is_some() {
+            panic!("ISR for vector {} is already registered!", idx);
+
+        }
+        self.map[idx] = Some(isr);
+        cpu::enable_int_nested(int_enabled);
     }
 
     /// Check if an ISR is registered for `vector`. If so, call it.
     pub fn report(&mut self, vector: u8) -> bool {
-        let vector_num = vector as usize;
-        
-        // Check if the vector is valid
-        if vector_num >= self.map.len() {
-            kprintln!("Invalid interrupt vector: {}", vector_num);
+        if vector as usize >= self.map.len() {
+            kprintln!("ISR vector out of range: {}", vector);
             cpu::halt();
             return false;
         }
-        
-        // Check if an ISR is registered for this vector
-        match &self.map[vector_num] {
+        match &mut self.map[vector as usize] {
             Some(isr) => {
-                // Call the ISR
                 isr.trigger();
                 true
-            },
+            }
             None => {
-                // No ISR registered for this vector
-                kprintln!("No ISR registered for interrupt vector: {}", vector_num);
+                kprintln!("ISR not registered for vector: {}", vector);
                 cpu::halt();
                 false
             }
         }
+    }
+
+    pub unsafe fn force_unlock(){
+        INT_VECTORS.force_unlock();
     }
 }

@@ -113,10 +113,12 @@ impl Pic {
                 // IRQ is on PIC 1
                 let mask = self.data1.inb() & !(1 << irq_num);
                 self.data1.outb(mask);
+                cpu::io_wait();
             } else {
                 // IRQ is on PIC 2
                 let mask = self.data2.inb() & !(1 << (irq_num - 8));
                 self.data2.outb(mask);
+                cpu::io_wait();
             }
         }
     }
@@ -129,10 +131,12 @@ impl Pic {
                 // IRQ is on PIC 1
                 let mask = self.data1.inb() | (1 << irq_num);
                 self.data1.outb(mask);
+                cpu::io_wait();
             } else {
                 // IRQ is on PIC 2
                 let mask = self.data2.inb() | (1 << (irq_num - 8));
                 self.data2.outb(mask);
+                cpu::io_wait();
             }
         }
     }
@@ -140,16 +144,14 @@ impl Pic {
     /// Get the state (enabled/disabled) of an IRQ in the PIC.
     pub fn status (&mut self, irq: Irq) -> bool {
         let irq_num = irq as u8;
+        let (data_port, bit) = if irq_num < 8 {
+            (&mut self.data1, irq_num)
+        } else {
+            (&mut self.data2, irq_num - 8)
+        };
         unsafe {
-            if irq_num < 8 {
-                // IRQ is on PIC 1
-                let mask = self.data1.inb();
-                (mask & (1 << irq_num)) == 0 // If bit is 0, IRQ is enabled
-            } else {
-                // IRQ is on PIC 2
-                let mask = self.data2.inb();
-                (mask & (1 << (irq_num - 8))) == 0 // If bit is 0, IRQ is enabled
-            }
+            let mask = data_port.inb();
+            (mask & (1 << bit)) == 0
         }
     }
 }

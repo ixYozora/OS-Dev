@@ -65,9 +65,9 @@ impl IdtEntry {
         return IdtEntry {
             offset_low: (offset & 0xFFFF) as u16, // Lower 16 bits of the offset
             selector: 16, // Kernel code segment selector (GDT entry 2)
-            options: 0b10001110, // Present, DPL=0, 64-bit interrupt gate
+            options: 0b1000_1110_00000000, // Present, DPL=0, 64-bit interrupt gate
             offset_mid: ((offset >> 16) & 0xFFFF) as u16, // Middle 16 bits of the offset
-            offset_high: (offset >> 32) as u32, // Upper 32 bits of the offset
+            offset_high: ((offset >> 32) & 0xFFFFFFFF) as u32, // Upper 32 bits of the offset
             reserved: 0 // Reserved field, set to zero
         };
 

@@ -83,36 +83,15 @@ pub extern "C" fn startup() {
     cga::CGA.lock().clear();
     
     // Initialize interrupts and keyboard
+    aufgabe1();
+    //aufgabe2();
     aufgabe3();
     
     kprintln!("Boot sequence finished");
     
     // Keep the OS running to handle interrupts
     loop {
-        // Process keyboard input from the buffer
-        if let Some(key) = keyboard::get_key_buffer().get_last_key() {
-            if key.valid() {
-                let asc = key.get_ascii();
-                if asc == 8 { // Backspace
-                    let mut cga = cga::CGA.lock();
-                    let (mut x, mut y) = cga.getpos();
-                    if x > 0 || y > 0 {
-                        if x == 0 {
-                            x = 79;
-                            if y > 0 { y -= 1; }
-                        } else {
-                            x -= 1;
-                        }
-                        cga.setpos(x, y);
-                        cga.show(x, y, ' ', cga::CGA_STD_ATTR);
-                        cga.setpos(x, y);
-                    }
-                }
-                else if asc != 0 && (asc.is_ascii_graphic() || asc == b' ') {
-                    print!("{}", asc as char);
-                }
-            }
-        }
+
     }
 }
 

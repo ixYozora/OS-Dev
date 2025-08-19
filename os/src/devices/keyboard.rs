@@ -356,19 +356,9 @@ impl Keyboard {
                 return None;
             }
 
-            // Check if it's from the auxiliary device (mouse)
-            if (self.control_port.inb() & KBD_AUXB) != 0 {
-                // Read the byte but ignore it (it's from the mouse)
-                self.data_port.inb();
-                return None;
-            }
-
-            // Read the byte from the data port
             self.code = self.data_port.inb();
 
-            // Try to decode the key
             if self.key_decoded() {
-                // Return a copy of the decoded key
                 Some(self.gather)
             } else {
                 None
@@ -408,6 +398,7 @@ impl ISR for KeyboardISR {
         }
 
         // No need to explicitly acknowledge the interrupt to the PIC
+        crate::kernel::interrupts::pic::PIC.lock();
         // as we're using automatic EOI mode (set in pic.rs init function)
     }
 }
