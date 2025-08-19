@@ -14,6 +14,7 @@
 #![allow(unused_imports)]
 #![allow(unused_macros)]
 #![feature(abi_x86_interrupt)]
+#![feature(naked_functions)]
 
 extern crate alloc;
 extern crate spin; // we need a mutex in devices::cga_print
@@ -24,6 +25,8 @@ mod devices;
 mod kernel;
 mod user;
 mod consts;
+
+mod library;
 
 use core::panic::PanicInfo;
 
@@ -37,6 +40,7 @@ use user::aufgabe1::text_demo;
 use user::aufgabe1::keyboard_demo;
 use user::aufgabe2::heap_demo;
 use user::aufgabe2::sound_demo;
+use user::aufgabe4::coroutine_demo;
 use kernel::interrupts::idt;
 use kernel::interrupts::pic;
 use kernel::interrupts::intdispatcher;
@@ -57,7 +61,7 @@ fn aufgabe1() {
 }
 fn aufgabe2() {
     heap_demo::run();
-    sound_demo::run();
+    //sound_demo::run();
 }
 
 fn aufgabe3(){
@@ -75,6 +79,10 @@ fn aufgabe3(){
     cpu::enable_int();
 }
 
+fn aufgabe4(){
+    coroutine_demo::run();
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn startup() {
     kprintln!("Welcome to hhuTOS!");
@@ -83,11 +91,12 @@ pub extern "C" fn startup() {
     cga::CGA.lock().clear();
     
     // Initialize interrupts and keyboard
-    aufgabe1();
+    //aufgabe1();
     //aufgabe2();
     aufgabe3();
-    
-    kprintln!("Boot sequence finished");
+    aufgabe4();
+
+    // kprintln!("Boot sequence finished");
     
     // Keep the OS running to handle interrupts
     loop {

@@ -72,8 +72,15 @@ impl<T> LinkedQueue<T> {
     {
 
         /* Hier muss Code eingefuegt werden */
+        let mut current = &mut self.head;
+        while let Some(ref mut node) = current {
+            if f(&node.data) {
+                *current = node.next.take();
+                return true;
+            }
+            current = &mut node.next;
+        }
 
-        false
     }
 }
 
