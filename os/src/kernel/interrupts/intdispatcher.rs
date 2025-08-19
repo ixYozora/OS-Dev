@@ -73,9 +73,13 @@ pub static INT_VECTORS: Mutex<IntVectors> = Mutex::new(IntVectors::new());
 /// The main interrupt dispatcher.
 /// Every interrupt is routed here, if not specified otherwise in the IDT.
 pub fn int_disp(vector: u8, stack_frame: InterruptStackFrame, error_code: Option<u64>) {
-
-    /* Hier muss Code eingefuegt werden */
-
+    // Print interrupt information using kprintln!
+    kprintln!("int_disp: Interrupt {}!", vector);
+    
+    // Call report to handle the interrupt if an ISR is registered
+    INT_VECTORS.lock().report(vector);
+    
+    return;
 }
 
 /// The Interrupt vector map. Each ISR is registered in this map.
@@ -110,15 +114,46 @@ impl IntVectors {
     /// Register an ISR.
     /// Interrupts get disabled while registering the ISR to avoid race conditions with int_disp().
     pub fn register(&mut self, vector: InterruptVector, isr: Box<dyn ISR>) {
+        // Disable interrupts while registering the ISR
+        let int_enabled = cpu::is_int_enabled();
+        if int_enabled {
+            cpu::disable_int();
+        }
 
-        /* Hier muss Code eingefuegt werden */
+        // Register the ISR
+        let vector_num = vector as usize;
+        self.map[vector_num] = Some(isr);
 
+        // Restore interrupt state
+        if int_enabled {
+            cpu::enable_int();
+        }
     }
 
     /// Check if an ISR is registered for `vector`. If so, call it.
     pub fn report(&mut self, vector: u8) -> bool {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let vector_num = vector as usize;
+        
+        // Check if the vector is valid
+        if vector_num >= self.map.len() {
+            kprintln!("Invalid interrupt vector: {}", vector_num);
+            cpu::halt();
+            return false;
+        }
+        
+        // Check if an ISR is registered for this vector
+        match &self.map[vector_num] {
+            Some(isr) => {
+                // Call the ISR
+                isr.trigger();
+                true
+            },
+            None => {
+                // No ISR registered for this vector
+                kprintln!("No ISR registered for interrupt vector: {}", vector_num);
+                cpu::halt();
+                false
+            }
+        }
     }
 }

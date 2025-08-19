@@ -107,21 +107,49 @@ impl Pic {
 
     /// Enable an IRQ to be forwarded to the processor by the PIC.
     pub fn allow (&mut self, irq: Irq) {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let irq_num = irq as u8;
+        unsafe {
+            if irq_num < 8 {
+                // IRQ is on PIC 1
+                let mask = self.data1.inb() & !(1 << irq_num);
+                self.data1.outb(mask);
+            } else {
+                // IRQ is on PIC 2
+                let mask = self.data2.inb() & !(1 << (irq_num - 8));
+                self.data2.outb(mask);
+            }
+        }
     }
 
     /// Disable an IRQ to be forwarded to the processor by the PIC.
     pub fn forbid (&mut self, irq: Irq) {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let irq_num = irq as u8;
+        unsafe {
+            if irq_num < 8 {
+                // IRQ is on PIC 1
+                let mask = self.data1.inb() | (1 << irq_num);
+                self.data1.outb(mask);
+            } else {
+                // IRQ is on PIC 2
+                let mask = self.data2.inb() | (1 << (irq_num - 8));
+                self.data2.outb(mask);
+            }
+        }
     }
 
     /// Get the state (enabled/disabled) of an IRQ in the PIC.
     pub fn status (&mut self, irq: Irq) -> bool {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let irq_num = irq as u8;
+        unsafe {
+            if irq_num < 8 {
+                // IRQ is on PIC 1
+                let mask = self.data1.inb();
+                (mask & (1 << irq_num)) == 0 // If bit is 0, IRQ is enabled
+            } else {
+                // IRQ is on PIC 2
+                let mask = self.data2.inb();
+                (mask & (1 << (irq_num - 8))) == 0 // If bit is 0, IRQ is enabled
+            }
+        }
+    }
 }

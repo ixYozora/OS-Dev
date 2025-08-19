@@ -85,6 +85,36 @@ impl Speaker {
     pub fn play(&mut self, frequency: usize, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
+        kprintln!("Frequency: {} Hz, Duration: {} ms", frequency, duration);
+        unsafe {
+            self.off();
+
+            if frequency == 0 {
+                self.delay(duration);
+                return;
+            }
+
+            let divisor = 1193180 / frequency;
+            if divisor < 2 || divisor > 65534 {
+                self.delay(duration);
+                return;
+            }
+
+            self.pit_ctrl_port.outb(0xB6);
+            self.pit_data2_port.outb((divisor & 0xFF) as u8);
+            self.pit_data2_port.outb((divisor >> 8) as u8);
+
+            let mut ppi = self.ppi_port.inb();
+            ppi |= 0x03;
+            self.ppi_port.outb(ppi);
+
+            self.delay(duration);
+
+            self.off();
+
+        }
+
+        kprintln!("Done");
 
     }
 
@@ -93,13 +123,22 @@ impl Speaker {
     pub fn on(&mut self) {
 
         /* Hier muss Code eingefuegt werden */
-
+        unsafe {
+            let mut val = self.ppi_port.inb();
+            val |= 0x03;
+            self.ppi_port.outb(val);
+        }
     }
 
     /// Turn off the speaker.
     pub fn off(&mut self) {
 
         /* Hier muss Code eingefuegt werden */
+        unsafe {
+            let mut val = self.ppi_port.inb();
+            val |= 0x03;
+            self.ppi_port.outb(val);
+        }
 
     }
 
@@ -108,9 +147,14 @@ impl Speaker {
     fn read_counter(&mut self) -> u16 {
 
         /* Hier muss Code eingefuegt werden */
-
+        unsafe {
+            self.pit_ctrl_port.outb(0x00);
+            let low = self.pit_data0_port.inb() as u16;
+            let high = self.pit_data0_port.inb() as u16;
+            (high) << 8 | low
+        }
     }
-    
+
     /// Wait for a given amount of time in milliseconds using counter 0 of the PIT.
     /// Mode 2 (rate generator) with a reload value of 1193 (0x04a9) is used.
     /// This means that the counter will count down from 1193 to 0 and then reload itself.
@@ -118,7 +162,23 @@ impl Speaker {
     fn delay(&mut self, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
+        if duration == 0 { return; }
 
+        const CYCLES_PER_MS: usize = 100_000;
+
+        let int_enabled = cpu::is_int_enabled();
+        cpu::disable_int();
+
+        for _ in 0..duration {
+            let mut cycles = CYCLES_PER_MS;
+            while cycles > 0 {
+                cycles -= 1;
+                let _ =  cycles.wrapping_mul(cycles);
+            }
+        }
+        if int_enabled {
+            cpu::enable_int();
+        }
     }
 }
 
