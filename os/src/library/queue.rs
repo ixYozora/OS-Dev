@@ -35,12 +35,12 @@ impl<T> LinkedQueue<T> {
             // The queue is empty, so set the head to the new node.
             self.head = Some(new_node);
         } else {
-            // Go through the list to find the last node and set its `next` to the new node.
+            // Go through the list to find the last node and set its next to the new node.
             let mut node = self.head.as_mut().unwrap();
 
             loop {
                 if node.next.is_none() {
-                    // We found the last node, so set its `next` to the new node.
+                    // We found the last node, so set its next to the new node.
                     node.next = Some(new_node);
                     break;
                 }
@@ -66,21 +66,66 @@ impl<T> LinkedQueue<T> {
 
     /// Remove the first element that matches the given predicate.
     /// Returns true if an element was removed, false otherwise.
-    /// `f` is a function that takes a reference to the data and returns true if it matches.
+    /// f is a function that takes a reference to the data and returns true if it matches.
     pub fn remove<F>(&mut self, f: F) -> bool
     where F: Fn(&T) -> bool
     {
+        // // Case 1: Empty queue
+        // if self.head.is_none() {
+        // return false;
+        // }
+        //
+        // // Case 2: Head matches
+        // if let Some(ref mut head) = self.head {
+        // if f(&head.data) {
+        // let next = head.next.take();
+        // self.head = next;
+        // return true;
+        // }
+        // }
+        //
+        // // Case 3: Search for matching node after head
+        // let mut current = self.head.as_mut().unwrap();
+        // while current.next.is_some() {
+        // let should_remove = {
+        // let next_node = current.next.as_mut().unwrap();
+        // f(&next_node.data)
+        // };
+        // if should_remove {
+        // let next_node = current.next.as_mut().unwrap();
+        // current.next = next_node.next.take();
+        // return true;
+        // }
+        // current = current.next.as_mut().unwrap();
+        // }
+        //
+        // false
 
-        /* Hier muss Code eingefuegt werden */
-        let mut current = &mut self.head;
-        while let Some(ref mut node) = current {
-            if f(&node.data) {
-                *current = node.next.take();
+
+        // Check if head matches and remove it
+        if let Some(mut head) = self.head.take() {
+            if f(&head.data) {
+                self.head = head.next.take();
                 return true;
+            } else {
+                self.head = Some(head);
             }
-            current = &mut node.next;
         }
 
+        // Search rest of queue
+        let mut current = self.head.as_mut().unwrap();
+
+        while let Some(ref mut next_node) = current.next {
+            if f(&next_node.data) {
+                // Remove next_node from list
+                let next_next = next_node.next.take();
+                current.next = next_next;
+                return true;
+            }
+            current = current.next.as_mut().unwrap();
+        }
+
+        false
     }
 }
 

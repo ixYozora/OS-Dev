@@ -26,29 +26,33 @@ fn next_id() -> usize {
 /// Low-level routine for starting a coroutine.
 #[naked]
 unsafe extern "C" fn coroutine_start(stack_ptr: usize) {
-    naked_asm!(
+    unsafe {
 
-       /* Hier muss Code eingefuegt werden */
-        "mov rsp, rdi",          // Load stack pointer
-        "xor rbp, rbp",          // Clear base pointer
-        "popf",                  // Restore flags
-        "pop rbp",               // Restore base pointer
-        "pop rdi",               // Restore coroutine pointer
-        "pop rsi",               // Dummy pop (alignment)
-        "pop rdx",               // Restore registers
-        "pop rcx",
-        "pop rbx",
-        "pop rax",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
-        "ret",
-    )
+
+        naked_asm!(
+
+           /* Hier muss Code eingefuegt werden */
+            "mov rsp, rdi",          // Load stack pointer
+            "xor rbp, rbp",          // Clear base pointer
+            "popf",                  // Restore flags
+            "pop rbp",               // Restore base pointer
+            "pop rdi",               // Restore coroutine pointer
+            "pop rsi",               // Dummy pop (alignment)
+            "pop rdx",               // Restore registers
+            "pop rcx",
+            "pop rbx",
+            "pop rax",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            "ret",
+        )
+    }
 }
 
 /// Low-level routine for switching to the next coroutine.
@@ -56,44 +60,48 @@ unsafe extern "C" fn coroutine_start(stack_ptr: usize) {
 /// `next_stack` is the value of `stack_ptr` of the next coroutine (the new rsp value).
 #[naked]
 unsafe extern "C" fn coroutine_switch(current_stack_ptr: *mut usize, next_stack: usize) {
-    naked_asm!(
-       /* Hier muss Code eingefuegt werden */
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        "push rax",
-        "push rbx",
-        "push rcx",
-        "push rdx",
-        "push rsi",
-        "push rdi",
-        "push rbp",
-        "pushf",
-        "mov [rdi], rsp",
-        "mov rsp, rsi",
-        "popf",
-        "pop rbp",
-        "pop rdi",
-        "pop rsi",
-        "pop rdx",
-        "pop rcx",
-        "pop rbx",
-        "pop rax",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
-        "ret",
-    )
+    unsafe {
+
+
+        naked_asm!(
+           /* Hier muss Code eingefuegt werden */
+            "push r8",
+            "push r9",
+            "push r10",
+            "push r11",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "push rax",
+            "push rbx",
+            "push rcx",
+            "push rdx",
+            "push rsi",
+            "push rdi",
+            "push rbp",
+            "pushf",
+            "mov [rdi], rsp",
+            "mov rsp, rsi",
+            "popf",
+            "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rdx",
+            "pop rcx",
+            "pop rbx",
+            "pop rax",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            "ret",
+        )
+    }
 }
 
 /// Represents a coroutine in the system.

@@ -41,6 +41,7 @@ use user::aufgabe1::keyboard_demo;
 use user::aufgabe2::heap_demo;
 use user::aufgabe2::sound_demo;
 use user::aufgabe4::coroutine_demo;
+use user::aufgabe4::thread_demo;
 use kernel::interrupts::idt;
 use kernel::interrupts::pic;
 use kernel::interrupts::intdispatcher;
@@ -80,7 +81,8 @@ fn aufgabe3(){
 }
 
 fn aufgabe4(){
-    coroutine_demo::run();
+    //coroutine_demo::run();
+    thread_demo::run();
 }
 
 #[unsafe(no_mangle)]
@@ -90,15 +92,10 @@ pub extern "C" fn startup() {
     allocator::init();
     cga::CGA.lock().clear();
     
-    // Initialize interrupts and keyboard
-    //aufgabe1();
-    //aufgabe2();
+
     aufgabe3();
     aufgabe4();
 
-    // kprintln!("Boot sequence finished");
-    
-    // Keep the OS running to handle interrupts
     loop {
 
     }

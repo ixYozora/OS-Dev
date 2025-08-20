@@ -1,12 +1,12 @@
 /* ╔═════════════════════════════════════════════════════════════════════════╗
-   ║ Module: scheduler                                                       ║
-   ╟─────────────────────────────────────────────────────────────────────────╢
-   ║ Descr.: A basic round-robin scheduler for cooperative threads.          ║
-   ║         No priorities supported.                                        ║
-   ╟─────────────────────────────────────────────────────────────────────────╢
-   ║ Autor:  Michael Schoettner, 15.05.2023                                  ║
-   ╚═════════════════════════════════════════════════════════════════════════╝
-*/
+ ║ Module: scheduler ║
+ ╟─────────────────────────────────────────────────────────────────────────╢
+ ║ Descr.: A basic round-robin scheduler for cooperative threads. ║
+ ║ No priorities supported. ║
+ ╟─────────────────────────────────────────────────────────────────────────╢
+ ║ Autor: Michael Schoettner, 15.05.2023 ║
+ ╚═════════════════════════════════════════════════════════════════════════╝
+ */
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Display;
@@ -29,7 +29,7 @@ pub fn get_scheduler() -> &'static Scheduler {
 /// Unlock the scheduler state.
 /// This function is called from assembly code.
 /// Usually, the mutex would be unlocked automatically when going out of scope.
-/// However, since we switch to a different thread in `yield_cpu()` and `exit()`,
+/// However, since we switch to a different thread in yield_cpu() and exit(),
 /// the scope is not left and the mutex remains locked.
 /// As a workaround, we provide this function to unlock the scheduler manually.
 #[unsafe(no_mangle)]
@@ -61,14 +61,14 @@ impl Scheduler {
             active_thread: Some(Thread::new(idle_thread)),
             ready_queue: LinkedQueue::new(),
         };
-        
-        Scheduler { state:  Mutex::new(state) }
+
+        Scheduler { state: Mutex::new(state) }
     }
 
     /// Get the ID of the currently active thread.
     pub fn get_active_tid(&self) -> usize {
         let state = self.state.lock();
-        
+
         state.active_thread.as_ref().unwrap().get_id()
     }
 
@@ -84,7 +84,7 @@ impl Scheduler {
     /// Register a new thread in the ready queue.
     pub fn ready(&self, thread: Box<Thread>) {
         let mut state = self.state.lock();
-        
+
         state.ready_queue.enqueue(thread);
     }
 
@@ -96,31 +96,58 @@ impl Scheduler {
         let mut current = state.active_thread.take().unwrap();
         // The idle thread never exits, so there must be at least one thread in the queue.
         let next = state.ready_queue.dequeue().unwrap();
-            
+
         // Set the dequeued thread as the active thread,
         // overwriting the current one, which we want to exit.
         state.active_thread = Some(next);
-        
+
         unsafe {
             // Switch to the next thread.
-            // `current` still contains the old thread we want to exit,
-            // while `state.active_thread` contains the next one.
+            // current still contains the old thread we want to exit,
+            // while state.active_thread contains the next one.
             Thread::switch(current.as_mut(), state.active_thread.as_mut().unwrap().as_mut());
         }
     }
 
     /// Yield the CPU and switch to the next thread in the ready queue.
     pub fn yield_cpu(&self) {
+        // let mut state = self.state.lock();
+        //
+        // // Move the current active thread to the end of the ready queue
+        // let mut current = state.active_thread.take().unwrap();
+        // state.ready_queue.enqueue(current);
+        //
+        // // Get the next thread from the front of the ready queue
+        // let next = state.ready_queue.dequeue().unwrap();
+        // state.active_thread = Some(next);
+        //
+        // unsafe {
+        // // Switch to the next thread
+        // Thread::switch(state.active_thread.as_mut().unwrap().as_mut(), state.active_thread.as_mut().unwrap().as_mut());
+        // }
 
-        /* Hier muss Code eingefuegt werden */
+        let mut state = self.state.lock();
 
+        // Move current thread to back of ready queue
+        let mut current = state.active_thread.take().unwrap();
+        let current_ptr = &mut *current as *mut Thread;
+        state.ready_queue.enqueue(current);
+
+        // Get next thread from front of queue
+        let next = state.ready_queue.dequeue().unwrap();
+        state.active_thread = Some(next);
+        let next_ptr = state.active_thread.as_mut().unwrap().as_mut() as *mut Thread;
+
+        unsafe {
+            Thread::switch(current_ptr, next_ptr);
+        }
     }
 
     /// Kill the thread with the given ID by removing it from the ready queue.
     pub fn kill(&self, to_kill_id: usize) {
-
-        /* Hier muss Code eingefuegt werden */
-
+        let mut state = self.state.lock();
+        // Remove thread from ready queue if it exists there
+        state.ready_queue.remove(|thread| thread.get_id() == to_kill_id);
     }
 }
 
@@ -128,7 +155,7 @@ impl Display for Scheduler {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let state = self.state.lock();
         let active = state.active_thread.as_ref().unwrap();
-        
+
         write!(f, "active: {}, ready: {}", active, state.ready_queue)
     }
 }

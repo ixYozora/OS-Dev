@@ -28,11 +28,32 @@ pub fn next_id() -> usize {
 /// Low-level routine for starting a thread.
 #[naked]
 unsafe extern "C" fn thread_start(stack_ptr: usize) {
-    naked_asm!(
+    unsafe {
+        naked_asm!(
 
-        /* Hier muss Code eingefuegt werden */
-        "push rbp",
-    )
+            /* Hier muss Code eingefuegt werden */
+            "mov rsp, rdi",          // Load stack pointer
+            "call unlock_scheduler",
+            "xor rbp, rbp",          // Clear base pointer
+            "popf",                  // Restore flags
+            "pop rbp",               // Restore base pointer
+            "pop rdi",               // Restore thread pointer
+            "pop rsi",               // Dummy pop (alignment)
+            "pop rdx",               // Restore registers
+            "pop rcx",
+            "pop rbx",
+            "pop rax",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            "ret",
+        )
+    }
 }
 
 /// Low-level routine for switching to the next thread.
@@ -40,11 +61,48 @@ unsafe extern "C" fn thread_start(stack_ptr: usize) {
 /// `next_stack` is the value of `stack_ptr` of the next thread (the new rsp value).
 #[naked]
 unsafe extern "C" fn thread_switch(current_stack_ptr: *mut usize, next_stack: usize) {
-    naked_asm!(
+    unsafe {
+        naked_asm!(
 
-        /* Hier muss Code eingefuegt werden */
-        "push rbp",
-    )
+            /* Hier muss Code eingefuegt werden */
+            "push r8",
+            "push r9",
+            "push r10",
+            "push r11",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "push rax",
+            "push rbx",
+            "push rcx",
+            "push rdx",
+            "push rsi",
+            "push rdi",
+            "push rbp",
+            "pushf",                  // Save flags
+            "mov [rdi], rsp",         // Save current stack pointer to current_stack_ptr
+            "mov rsp, rsi", // Load next_stack as the new stack pointer
+            "call unlock_scheduler",
+            "popf",                   // Restore flags
+            "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rdx",
+            "pop rcx",
+            "pop rbx",
+            "pop rax",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            "ret",
+        )
+    }
 }
 
 /// Represents a coroutine in the system.
@@ -87,6 +145,9 @@ impl Thread {
     pub fn start(&mut self) {
 
         /* Hier muss Code eingefuegt werden */
+        unsafe {
+            thread_start(self.stack_ptr);
+        }
 
     }
 
@@ -95,7 +156,13 @@ impl Thread {
     pub unsafe fn switch(current: *mut Thread, next: *mut Thread) {
 
         /* Hier muss Code eingefuegt werden */
-
+        unsafe {
+            let next = next;
+            if next.is_null() {
+                panic!("No Thread!");
+            }
+            thread_switch(&mut (*current).stack_ptr, (*next).stack_ptr);
+        }
     }
 
     /// Get the ID of the thread.

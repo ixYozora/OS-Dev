@@ -155,6 +155,9 @@ impl IntVectors {
     }
 
     pub unsafe fn force_unlock(){
-        INT_VECTORS.force_unlock();
+        unsafe {
+            INT_VECTORS.force_unlock();
+        }
+
     }
 }

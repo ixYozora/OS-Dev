@@ -258,7 +258,7 @@ impl Keyboard {
 
     pub fn set_repeat_rate(&mut self, speed: u8, delay: u8) {
 
-        if speed > 31 || speed < 0 || delay > 3 || delay < 0{
+        if speed > 31  || delay > 3 {
             return;
         }
 
@@ -268,9 +268,9 @@ impl Keyboard {
             self.control_port.outb(KBD_CMD_SET_SPEED);
 
             while (self.control_port.inb() & KBD_OUTB) == 0{}
-            let mut check_ACK = self.control_port.inb();
+            let mut check_ack = self.control_port.inb();
 
-            if check_ACK & KBD_REPLY_ACK != 1 {
+            if check_ack & KBD_REPLY_ACK != 1 {
                 return;
             }
 
@@ -278,9 +278,9 @@ impl Keyboard {
             self.control_port.outb(repeatbyte);
 
             while (self.control_port.inb() & KBD_OUTB) == 0{}
-            check_ACK = self.control_port.inb();
+            check_ack = self.control_port.inb();
 
-            if check_ACK & KBD_REPLY_ACK != 1 {
+            if check_ack & KBD_REPLY_ACK != 1 {
                 return;
             }
         }
@@ -320,9 +320,9 @@ impl Keyboard {
             self.control_port.outb(KBD_CMD_SET_LED);
 
             while (self.control_port.inb() & KBD_OUTB) == 0{}
-            let mut check_ACK = self.control_port.inb();
+            let mut check_ack = self.control_port.inb();
 
-            if check_ACK & KBD_REPLY_ACK != 1 {
+            if check_ack & KBD_REPLY_ACK != 1 {
                 return;
             }
 
@@ -330,9 +330,9 @@ impl Keyboard {
             self.control_port.outb(self.leds);
 
             while (self.control_port.inb() & KBD_OUTB) == 0{}
-            check_ACK = self.control_port.inb();
+            check_ack = self.control_port.inb();
 
-            if check_ACK & KBD_REPLY_ACK != 1 {
+            if check_ack & KBD_REPLY_ACK != 1 {
                 return;
             }
         }

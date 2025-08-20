@@ -134,9 +134,9 @@ impl LinkedListAllocator {
 
         /* Hier muss Code eingefuegt werden */
         let mut current = &self.head.next;
-        kprintln!("Free list:");
+        // kprintln!("Free list:");
         while let Some(node) = current {
-            kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
+          //  kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
             current = &node.next;
         }
     }
@@ -144,7 +144,7 @@ impl LinkedListAllocator {
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
 
         /* Hier muss Code eingefuegt werden */
-        kprint!("list-alloc: size={}, align={}", layout.size(), layout.align());
+        //kprint!("list-alloc: size={}, align={}", layout.size(), layout.align());
         let (size, align) = Self::size_align(layout);
         let mut prev = &mut self.head;
         while let Some(ref mut node) = prev.next {
