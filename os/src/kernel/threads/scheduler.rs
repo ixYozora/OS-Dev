@@ -18,6 +18,7 @@ use crate::kernel::threads::idle_thread::idle_thread;
 use crate::kernel::threads::thread;
 use crate::kernel::threads::thread::Thread;
 use crate::library::queue::LinkedQueue;
+use crate::cpu;
 
 /// Global scheduler instance
 static SCHEDULER: Once<Scheduler> = Once::new();
@@ -165,6 +166,17 @@ impl Scheduler {
         self.state.is_locked()
     }
 
+    pub fn is_initialized(&self) -> bool {
+
+
+        let state = self.state.lock();
+
+
+        state.initialized
+
+
+    }
+
     /// Prepare the current thread for blocking.
     /// This functions disables interrupts and return the current thread,
     /// as well as the return value from `cpu::disable_int_nested()`.
@@ -172,7 +184,21 @@ impl Scheduler {
     /// which will enable interrupts again and resume the scheduler.
     pub fn prepare_block(&self) -> (Box<Thread>, bool) {
 
-        /* Hier muss Code eingefuegt werden */
+        let mut state = self.state.lock();
+
+        // Must be inited and not locked.
+        if !state.initialized {
+            panic!("Scheduler not initialized");
+        }
+
+        if allocator::is_locked() {
+            panic!("Allocator is locked, cannot block");
+        }
+
+        let interrupts_enabled = cpu::disable_int_nested();
+        let current_thread = state.active_thread.take().unwrap();
+
+        (current_thread, interrupts_enabled)
 
     }
 
@@ -180,15 +206,29 @@ impl Scheduler {
     /// This resumes the scheduler and switches to the next thread in the ready queue.
     pub unsafe fn switch_from_blocked_thread(&self, blocked_thread: *mut Thread, interrupts_enabled: bool) {
 
-        /* Hier muss Code eingefuegt werden */
+        let mut state = self.state.lock();
+
+        if let Some(mut next_thread) = state.ready_queue.dequeue() {
+
+            state.active_thread = Some(next_thread);
+
+            unsafe {
+                Thread::switch(blocked_thread, state.active_thread.as_mut().unwrap().as_mut());
+            }
+
+        } else {
+            unsafe {
+                state.active_thread = Some(Box::from_raw(blocked_thread));
+            }
+        }
+
+        cpu::enable_int_nested(interrupts_enabled);
 
     }
 
 }
 
 
-
-}
 
 impl Display for Scheduler {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

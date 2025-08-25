@@ -9,26 +9,27 @@ fn thread_entry() {
 
     let id = get_scheduler().get_active_tid();
     let mut counter = 0;
+    let time = pit::get_system_time();
+
     loop {
-        if let Some(mut cga) = cga::CGA.try_lock() {
-            cga.setpos(10, 10 + id);
-            print_cga!(&mut cga, "Thread [{}]: {}", id, counter);
+
+        {
+            let mut cga = cga::CGA.lock();
+            cga.setpos(10, 10 +id);
+            print_cga!(&mut cga, "Thread [{}] iteration: {}", id, counter);
         }
-
-
-        //cga.setpos(10, 10 + id);
-        //print_cga!(&mut cga, "Thread [{}]: {}", id, counter);
-
-
-        //cga::CGA.lock().setpos(10, 10 + id);
-        //println!("Thread [{}]: {}", id, counter);
-        //pit::wait(100);
 
         counter += 1;
 
         if counter % 20 == 0 {
             get_scheduler().yield_cpu();
         }
+
+        if counter > 100000 {
+            kprintln!("Thread [{}] finished {} iterations after {} ms.", id, counter, pit::get_system_time() - time);
+            break;
+        }
+
     }
 
 }
@@ -42,18 +43,16 @@ pub fn run() {
     cga::CGA.lock().clear();
     println!("Starting thread demo...");
 
-    let mut scheduler = get_scheduler();
+    let scheduler = get_scheduler();
 
     let thread1 = Thread::new(thread_entry);
     let thread2 = Thread::new(thread_entry);
     let thread3 = Thread::new(thread_entry);
 
-    let tetris_thread = Thread::new(play_tetris);
 
     scheduler.ready(thread1);
     scheduler.ready(thread2);
     scheduler.ready(thread3);
-    scheduler.ready(tetris_thread);
 
     scheduler.schedule();
 

@@ -116,6 +116,7 @@ pub extern "C" fn startup() {
 
     println!("Welcome to hhuTOSr!");
 
+    aufgabe5();
 
     loop {}
 }

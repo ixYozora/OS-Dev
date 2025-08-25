@@ -3,7 +3,7 @@ use core::arch::asm;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
 use core::ptr;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, Ordering};
 use crate::kernel::cpu;
 use crate::kernel::threads::scheduler::get_scheduler;
 use crate::kernel::threads::thread::Thread;
@@ -34,13 +34,19 @@ impl<T> Mutex<T> {
             wait_queue: Spinlock::new(LinkedQueue::new())
         }
     }
-    
+
     /// Try to acquire the lock once without blocking.
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
 
-        /* Hier muss Code eingefuegt werden */
+        let before = self.lock.swap(true, Ordering::Acquire);
 
-        None
+        if before {
+            // lock was held
+            return None;
+        }
+
+        Some(MutexGuard { lock: self })
+
     }
 
     /// Acquire the lock, blocking if necessary until it is available.
@@ -50,17 +56,51 @@ impl<T> Mutex<T> {
     /// so it can try to acquire the lock again.
     pub fn lock(&self) -> MutexGuard<T> {
 
-        /* Hier muss Code eingefuegt werden */
+        // act as a spinlock if scheduler is not initialized
+        if !get_scheduler().is_initialized() {
+            kprintln!("Mutex::lock() called before scheduler initialization, acting as a spinlock.");
+
+            let mut before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
+            while before {
+                unsafe {
+                    asm!("pause");
+                }
+                before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
+            }
+
+            return MutexGuard { lock: self };
+        }
+
+        //Scheduler is initialized, so we can block the thread
+
+        let mut before = self.lock.swap(true, Ordering::Acquire);
+
+        while before {
+            let (mut thread_to_be_blocked, interrupt) = get_scheduler().prepare_block();
+            //rust borrowing is...
+            let thread_borrow = thread_to_be_blocked.as_mut() as *mut Thread;
+
+            //own scope, because of locking mutex itself
+            {
+                self.wait_queue.lock().enqueue(thread_to_be_blocked);
+            }
+
+            unsafe {
+                get_scheduler().switch_from_blocked_thread(thread_borrow, interrupt);
+            }
+
+            before = self.lock.swap(true, Ordering::Acquire)
+
+        }
 
         MutexGuard { lock: self }
     }
-    
+
     /// Check if the lock is currently held.
     pub fn is_locked(&self) -> bool {
 
-        /* Hier muss Code eingefuegt werden */
-        
-        false
+        self.lock.load(Ordering::Relaxed)
+
     }
 
     /// Check if the wait queue is currently locked.
@@ -72,15 +112,31 @@ impl<T> Mutex<T> {
     /// If there are threads waiting for the lock, the next thread in the wait queue is woken up.
     pub fn unlock(&self) {
 
-        /* Hier muss Code eingefuegt werden */
+        if !self.is_locked() {
+            panic!("Mutex is not locked, cannot unlock");
+        }
 
+        self.lock.store(false, Ordering::Release);
+
+        if !get_scheduler().is_initialized() {
+            return;
+        }
+
+        //own scope, because of locking mutex itself
+        {
+            let mut wait_queue = self.wait_queue.lock();
+            if let Some(next_thread) = wait_queue.dequeue() {
+                // Wake up the next thread in the queue
+                get_scheduler().ready(next_thread);
+            }
+        }
     }
-    
+
     /// Forcefully unlock the mutex without waking up any waiting threads.
     /// This should only be used in exceptional cases.
     pub unsafe fn force_unlock(&self) {
 
-        /* Hier muss Code eingefuegt werden */
+        self.lock.store(false, Ordering::Release);
 
     }
 }

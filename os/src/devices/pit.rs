@@ -1,4 +1,11 @@
-
+/* ╔═════════════════════════════════════════════════════════════════════════╗
+   ║ Module: pit                                                             ║
+   ╟─────────────────────────────────────────────────────────────────────────╢
+   ║ Descr.: Programmable Interval Timer.                                    ║
+   ╟─────────────────────────────────────────────────────────────────────────╢
+   ║ Author:  Michael Schoettner, HHU, 15.6.2023                             ║
+   ╚═════════════════════════════════════════════════════════════════════════╝
+*/
 use alloc::boxed::Box;
 use core::arch::asm;
 use core::sync::atomic::AtomicUsize;
@@ -12,6 +19,7 @@ use crate::kernel::interrupts::intdispatcher::{INT_VECTORS, InterruptVector};
 use crate::kernel::interrupts::isr::ISR;
 use crate::kernel::interrupts::pic::{Irq, PIC};
 use crate::kernel::threads::scheduler::get_scheduler;
+use crate::kernel::allocator::is_locked;
 
 // Ports
 const PORT_CTRL: u16 = 0x43;
@@ -78,16 +86,20 @@ impl ISR for TimerISR {
         //add 1 to the global system time
         let current_time = SYSTEM_TIME.fetch_add(self.interval_ms, core::sync::atomic::Ordering::Relaxed);
 
-        //update spinner every 250 ms
-        if current_time % 250 == 0 {
-            if let Some(mut cga) = CGA.try_lock() {
-                let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
-                let spinner_char = SPINNER_CHARS[spinner_index];
-                //cga.setpos(CGA_COLUMNS - 1, 0);
-                //cga.print_byte(spinner_char as u8);
-                cga.show(CGA_COLUMNS - 1, 0, spinner_char, 4);
+        //careful with interrupts...
+        if !get_scheduler().is_locked() && !is_locked() && !cga::CGA.is_queue_locked() {
+            //update spinner every 250 ms
+            if current_time % 250 == 0 {
+                if let Some(mut cga) = CGA.try_lock() {
+                    let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
+                    let spinner_char = SPINNER_CHARS[spinner_index];
+                    //cga.setpos(CGA_COLUMNS - 1, 0);
+                    //cga.print_byte(spinner_char as u8);
+                    cga.show(CGA_COLUMNS - 1, 0, spinner_char, 4);
+                }
             }
         }
+
 
         //thread wechsel wegen deadlocks
         unsafe {

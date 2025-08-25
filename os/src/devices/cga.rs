@@ -9,7 +9,9 @@
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 use core::fmt::Write;
-use spin::Mutex;
+//use spin::Mutex;
+use crate::library::mutex::Mutex;
+//use crate::library::spinlock::Spinlock as Mutex;
 use crate::kernel::cpu as cpu;
 
 /// Global CGA instance, used for screen output in the whole kernel.
