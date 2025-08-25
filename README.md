@@ -1,61 +1,63 @@
-# Aufgabe 6: Synchronisierung
+# Aufgabe 7: Eine eigene BS-Erweiterung / Anwendung
 
 ## Lernziele
-1. Verstehen wie ein Spinlock sowie ein Guard funktioniert
-2. Im Scheduler das Blockieren von Threads realisieren
-3. Einen eigenen Mutex mit Warteschlange schreiben 
+1. Eine Anwendung schreiben
+2. Alternativ eine Betriebssystem-Komponente entwickeln
 
+## Mögliche Themenrichtungen
+- Grafikdemo (multithreaded)
+- Retro-Spiel (z.B. Snake, Pacman, ...)
+- einfache Shell (Beispiele für Befehle: clear, time, meminfo, ...) 
+- Scheduler mit Prioriäten (mit einer Demo)
 
-## A6.1: Umbau auf eigene Lock-Implementierung
-In der Vorgabe finden sie die zwei Dateien `library/spinlock.rs` und `library/mutex.rs`, die sie in Ihr Projekt einbauen sollen. Sie sollen damit den bisher verwendeten Mutex aus der `spin`-Crate ersetzen. Dabei soll nachvollzogen werden können, wie Locks generell und speziell Guards in Rust funktionieren. Merh Details dazu finden Sie in den folgenden Aufgaben.
+## Vorgabe
+Die Vorgabe umfasst einige Dateien, um einen Grafikmodus nutzen zu können. Außerdem enthält sie Code, mit dem der PCI-Bus nach Geräten gescannt wird.
 
-Kopieren Sie zunächst die beiden Dateien aus der Vorgabe in den Ordner `os/src/library` Ihres Projekts und ergänzen Sie die entsprechenden Zeilen in `os/src/library/mod.rs`. Ersetzen Sie nun in `cga.rs` den Mutex aus der `spin`-Crate durch den aus der Vorgabe. Die Mutex-API bleibt dabei gleich, es reich also oben in `devices/cga.rs` die Zeile `use spin::Mutex;` durch `use crate::library::mutex::Mutex;` auszutauschen.
+### Grafikfunktionen 
+Vorhanden sind nur sehr grundlegende Grafik-Funktionen, inkl. einer Text-Ausgabe mit einer Schriftart. Weitere Funktionen sollen je nach Anwendung ergänzt werden. 
 
-Die Mutex-Implementierung aus der Vorgabe macht aktuell noch nichts und tut einfach bei jedem Aufruf von `lock()` und `try_lock()` so, als hätte man das Lock erfolgreich bekommen. Das heißt, dass Zugriffe auf den CGA-Bildschirm nun effektiv nicht mehr synchronisiert sind und mehrere mutable Referenzen auf `CGA` gleichzeitig existieren können. Wenn Sie nun einmal die Demo aus Aufgabe 5 starten, wird sich die Ausgabe der Zähler nicht mehr korrekt verhalten. Wo bisher jeder Thread seinen Zähler in einer eigenen Zeile ausgegeben hat, springt der Cursor nun wild zwischen den drei Zeilen herum und die Ausgabe geschieht kreuz und quer (ähnlich wie auf der unten stehenden Abbildung).
+Ob das System im Grafik- oder Textmodus startet wird in `boot/boot.asm`durch die die Konstante `TEXT_MODE` festgelegt. Wenn diese Konstante aukommentiert wird, so schaltet `grub` direkt in den Grafikmodus (800x600 mit 32 Bit pro Pixel). Eine alternative Grafikauflösung kann durch die Konstanten `MULTIBOOT_GRAPHICS_*` in  `boot/boot.asm` eingestellt werden. Mögliche Auflösungen sollten sich an dem VESA-Standard orientieren, siehe hier: [VESA](https://en.wikipedia.org/wiki/VESA_BIOS_Extensions). Es sollte immer ein Modus mit 4 Byte pro Pixel als Farbtiefe verwendet werden.
 
-![aufgabe1.png](img/aufgabe1.png)
+Da jeder Pixel von der CPU einzeln im Grafikspeicher gesetzt werden muss, kann das Zeichnen komplexer Szenen schnell langsam werden. Eine deutliche Performance-Steigerung erhält man mit einem Release-Build, bei dem Compiler-Optimierungen aktiviert sind. Allerdings kann dann nicht mehr debuggt werden. Einen solchen Build erstellt man mit dem folgenden Befehl:
+```bash
+cargo make --profile production qemu
+```
 
-## A6.2: Implementierung eines einfachen Spinlocks
-Implementieren Sie nun die leeren Methoden in `spinlock.rs`. Sie benötigen dafür die folgenden atomaren Methoden, die bereits in dem `Atomic` Struct aus der Rust `core` Bibliothek implementiert sind:
- - `store()`: Überschreibt den aktuellen Wert der atomaren Variable
- - `load()`: Liest den aktuellen Wert der atomaren Variable
- - `swap()`: Überschreibt den Wert der atomaren Variable und gibt den alten Wert zurück.
- 
-All diese Methoden kapseln atomare Operationen, die nicht unterbrochen werden können. Es ist daher nicht möglich, dass der Scheduler dazwischen "grätscht", während man eine der atomaren Operationen durchführt.
+Die Textausgabe über CGA funktioniert nicht im Grafikmodus! Ein Beispiel für die Textausgabe befindet sich in der Vorgabe in `user/aufgabe7/graphic_demo.rs`, siehe auch nachstehendes Bild.
 
-Das Prinzip eines Spinlocks ist simpel: In der `lock()`-Methode wird `true` in die Lock-Variable geschrieben. War der Wert vorher bereits `true`, so hält gerade ein anderer Thread das Lock. In diesem Fall wird in in einer Schleife erneut versucht das Lock zu bekommen, bis es klappt. War der Wert vorher `false`, wurde das Lock erfolgreich geholt und die Schleife kann verlassen werden.
+Folgende Dateien sind für die Grafik-Unterstützung in der Vorgabe:
+- `startup.rs`: Bekommt jetzt eine Mutltiboot-Referenz als Parameter
+- `devices/lfb.rs`: Zeichenfunktionen im Grafikmodus
+- `devices/font_8x8.rs`: Bitmap-Font für die Textausgabe im Grafikmodus
+- `kernel/cpu.rs`: Erweiterte IO-Port Befehle zum Schreiben von 16-/32-Bit Werten.
+- `kernel/multiboot.rs`: Struct-Definition für Bootloader-Daten, die gemäß des [Multiboot](https://www.gnu.org/software/grub/manual/multiboot/multiboot.html)-Protokolls an den Kernel übergen werden.
+- `user/aufgabe7/graphic_demo.rs`: Kleine Grafikdemo (siehe Bild unten)
+- `user/aufgabe7/bmp_hhu.rs`: HHU-Logo als Bitmap
+- `cbmp2rs.c`: Kleines C-Programm zum Konvertieren von Bildern, gespeichert von GIMP als C-Source, siehe auch `Graphics-Rust.pdf`.
 
-Das dauerhafte Warten auf einen bestimmten Wert in einer Schleife nennt sich *Busy Waiting* (oder *Busy Polling*). Häufig möchte man dies vermeiden, da die CPU hier wertvolle Rechenzeit und auch Energie verschwendet. Wie wir das Busy Waiting vermeiden können, schauen wir uns in der nächsten Aufgabe mit der `Mutex`-Implementierung an. Um solche Busy Waiting Schleifen etwas zu optimieren, bietet x86 die Instruktion `pause` an. Diese soll am Ende eines jeden Schleifendurchlaufs ausgeführt werden um der CPU mitzuteilen, dass sie sich gerade in einer Busy Waiting Schleife befindet. Sie können diese Instruktion einfach mit einem einzeiligen `asm!()` Block in Ihren Rust-Code einbauen.
+**Beispielausgabe der Grafikdemo**
 
-Testen Sie Ihren Spinlock indem Sie ihn zur Synchronisierung des CGA-Bildschirms nutzen. Dazu müssen sie einfach nur `use crate::library::mutex::Mutex;` durch `use crate::library::spinlock::Spinlock as Mutex;` ersetzen. Wenn alles klappt, sollten die drei Zähler-Threads nun wieder korrekt in ihre eigenen Zeilen schreiben.
+![lfb](img/lfb.png)
 
-Schauen Sie sich außerdem die Implementierung des Structs `SpinlockGuard` einmal genauer an. Dieses kapselt eine Referenz auf die synchronisierte Datenstruktur und ermöglicht durch Implementierung der `Deref` und `DerefMut` Traits einen transparent Zugriff auf diese. Die `drop()` Methode sorgt außerdem dafür, dass das Spinlock automatisch freigegeben wird, sobald das Scope in welchem das Lock geholt (und somit die Guard-Instanz angelegt) wurde, verlassen wird.
+### PCI
+Mit dem Quellcode in `devices/pci.rs` kann der PCI-Bus nach vorhandenen Geräten abgesucht werden. In `startup.rs` ist ein kleines Beispiel, welches nach einer Realtek RTL8139 Netzwerkkarte sucht und deren MAC-Adresse ausliest. Dies ist nur als kleine Demo gedacht, für diejenigen, die sich für Treiber-Programmierung interessieren und auch mal mit komplexeren Geräten als z.B. dem PIT arbeiten möchten. So etwas wäre auch als Abgabe denkbar. Dann muss allerdings je nach ausgesuchter Hardware kein voll funktionsfähiger Treiber implementiert werden, da dies den Aufwand der Aufgabe übersteigen würde. Gut dokumentierte PCI-Geräte sind z.B. die Realtek RTL8139 Netzwerkkarte oder ein IDE Festplatten Controller. Dazu findet man auch Artikel im OSDev-Wiki.
 
-In den folgenden Dateien muss Code implementiert werden: `library/spinlock.rs` und `devices/cga.rs`. 
+Wenn die Vorgabe richtig eingebaut wurde, sollten beim Booten folgenden Meldungen über die serielle Schnittstelle ausgegeben werden:
 
-![aufgabe2.png](img/aufgabe2.png)
+```
+Scanning PCI bus
+Found PCI device 8086:1237
+Found PCI device 8086:7000
+Found PCI device 8086:7010
+Found PCI device 8086:7113
+Found PCI device 1234:1111
+Found PCI device 10ec:8139
+Found Realtek RTL8139 network controller
+RTL8139 I/O base address: 0xc000
+MAC address: [52, 54, 0, 12, 34, 56]
+```
 
-## A6.3: Mutex mit Warteschlange
-Nun soll in `mutex.rs` ein Mutex mit einer Warteschlange implementiert werden. Falls ein Thread `lock()` aufruft und die Sperre nicht frei ist, soll der Thread blockiert werden. In diesem Fall soll der blockierte Thread in die Warteschlange des Mutex eingefügt und auf einen anderen Thread umgeschaltet werden. 
-
-Wenn ein Thread die Sperre freigibt, also durch das Freigeben des Guards `unlock()` aufgerufen wird, soll geprüft werden, ob die Warteschlange nicht leer ist. Falls ein Thread dort vorhanden ist, soll dieser entfernt und in die Ready-Queue des Schedulers eingefügt werden. Dass heißt, dass nicht direkt auf den Thread umgeschaltet wird, der deblockiert wird.
-
-In der Vorgabe finden Sie zwei neue Methoden in `scheduler.rs`, die Sie für den Mutex zuerst implementieren müssen. Die Methode `prepare_block()` schaltet die Interrupts ab und gibt anschließend den aktiven Thread, sowie den Rückgabewert von `cpu::disable_ints_nested()` zurück. Die Interrupts müssen abgeschaltet werden, da bei einem Thread-Wechsel zum jetzigen Zeitpunkt der aktuelle Thread verloren wäre. Er wurde aus dem Scheduler ausgehakt und es würde somit nie wieder zu ihm zurück gekehrt werden.
-
-Die Methode `switch_from_blocked_thread()` nimmt einen Pointer auf den blockierten Thread entgegen, sowie den Rückgabewert von `cpu::disable_int_nested()` aus dem vorhergehenden Aufruf von `prepare_block()` und wechselt zum nächsten Thread. Die Interrupts werden durch den Thread-Wechsel automatisch wieder aktiviert (bzw. ist das abhängig vom Flags-Register des nächsten Threads). Nach `Thread::switch()` müssen wir sie jedoch mit Hilfe von `cpu::enable_int_nested()` wieder einschalten. Zu diesem Zeitpunkt wurde der blockierte Thread wieder fortgesetzt.
-
-Implementieren Sie nun die leeren Funktionen in `mutex.rs`. Die Methode `lock()` soll hierbei den aktuellen Thread blockieren und in die Warteschlage des Mutex einhängen. In `unlock()` soll ein Thread aus der Warteschlange des Mutex ausgereiht und mit `scheduler::ready()` wieder in den Scheduler eingehangen werden. In `lock()` müssen Sie folgende Dinge beachten:
- - Wenn der Scheduler noch nicht initialisiert wurde, kann natürlich kein Thread blockiert werden. In dem Fall soll sich der Mutex einfach wie ein Spinlock verhalten.
- - Zum Einreihen des blockierten Threads in die Warteschlange des Mutex muss diese gelockt werden (sie ist ja bereits in der Vorgabe durch ein Spinlock geschützt). Da wir jedoch aus `scheduler::switch_from_blocked_thread()` erstmal nicht zurückkehren, bleibt die Warteschlage gelockt und beim nächsten Aufruf von `mutex::lock()` würde es zu einer Verklemmung kommen. Um das zu vermeiden sollte das Manipulieren der Warteschlange in einem eigenen Scope geschehen, so dass beim Verlassen dieses Scopes die Warteschlagen wieder freigegeben wird.
-
-Bevor wir den Mutex in `cga.rs` verwenden können, müssen wir noch eine Sache beachten: Beim Aufruf von `lock()` oder `unlock()` werden jeweils drei verschiedene andere Locks geholt: Das Lock der Mutex-Warteschlange, das Lock des Schedulers (zum Blockieren/Deblockieren des Threads) und das Lock des Allokators (zum Einreihen/Ausreihen aus der Mutex-Warteschlange). Sollte eines dieser Locks gerade gehalten werden, während in `pit::trigger()` das Spinner-Symboler ausgegeben wird, führt dies zu einer Verklemmung im Interrupt Handler. Um dieses Problem zu Lösen wurde im Scheduler die neue Methode `is_locked()` eingeführt. Prüfen Sie in `pit::trigger()` ob der Scheduler, der Allokator und die Warteschlange des CGA-Mutex gerade frei sind, bevor Sie `CGA.try_lock()` aufrufen und das Spinner-Symbol aktualisieren. Das wirkt nach sehr viel Aufwand nur für die Aktualisierung eines Symbols, verdeutlicht jedoch, wie behutsam man Code in Interupt-Handlern implementieren muss.
-
-In den folgenden Dateien muss Code implementiert werden: `library/mutex.rs`, `kernel/threads/scheduler.rs`, `devices/pit.rs`. 
-
-## A6.4: Vergleich aller Lösungen
-
-Lassen Sie nun in Ihrer Demo alle drei Threads bis zu einem bestimmten Wert zählen (z.B. 100000) und messen Sie dabei in jedem Thread die benötigte Zeit. Vergleichen Sie die neue Mutex-Implementierung mit dem Spinlock und dem Mutex aus der `spin`-Crate. Wie viel schneller rechnen die Threads mit unserer neuen Mutex-Implementierung?
-
-Sie können nun *FAST* überall wo Ihr Betriebssytem den Mutex aus der `spin`-Crate verwendet stattdessen unseren neuen Mutex benutzen. Jedoch sollte `INT_VECTORS` in `kernel/interrupts/intdispatcher.rs` besser mit einem Spinlock synchronisiert werden, da hier eine ähnliche Problematik wie bei `pit:trigger()` besteht. Außerdem sollte der `SchedulerState` in `kernel/threads/scheduler.rs` ebenfalls durch ein Spinlock gesichert sein, da der Mutex selbst ja auch auf den Scheduler zugreift und es so zu rekursiven Aufrufen und Verklemmungen kommt.
-
-Das System sollte weiterhin fehlerfrei funktionieren.
+Folgende Dateien sind für die PCI-Unterstützung in der Vorgabe:
+- `Makefile.toml`: Enthält kleine Änderungen um QEMU mit einer emulierten einer Realtek RTL8139 Netzwerkkarte zu starten
+- `startup.rs`: Sucht den PCI-Bus nach einer Realtek RTL8139 Netzwerkkarte ab
+- `devices/pci.rs`: Treiber für den PCI-Bus
