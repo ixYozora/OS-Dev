@@ -11,6 +11,7 @@ use core::fmt;
 use core::fmt::Write;
 use spin::Mutex;
 use crate::devices::cga;
+use crate::devices::cga::CGA;
 
 /// The global writer that can used as an interface from other modules.
 /// It is threadsafe by using 'Mutex'.
@@ -61,8 +62,31 @@ macro_rules! println {
     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
 }
 
+
+
+macro_rules! print_cga {
+    ($cga:expr, $($arg:tt)*) => ({
+        $crate::cga_print::print_cga($cga, format_args!($($arg)*));
+    });
+}
+
+macro_rules! println_cga {
+    ($cga:expr, $fmt:expr) => ($cga, print!(concat!($fmt, "\n")));
+    ($cga:expr, $fmt:expr, $($arg:tt)*) => ($cga, print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+
+
+
+
+
 /// Helper function of print macros (must be public)
+pub fn print_cga(cga: &mut CGA, args: fmt::Arguments) {
+    cga.write_fmt(args).unwrap();
+}
+
+/// Helper function of print_cga macros (must be public)
 pub fn print(args: fmt::Arguments) {
-    WRITER.lock().write_fmt(args).unwrap();
+    print_cga(&mut CGA.lock(), args);
 }
 
