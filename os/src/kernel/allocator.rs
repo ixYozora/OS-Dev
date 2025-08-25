@@ -86,3 +86,7 @@ fn align_up(addr: usize, align: usize) -> usize {
         addr - remainder + align
     }
 }
+
+pub fn is_locked() -> bool {
+    ALLOCATOR.inner.is_locked()
+}

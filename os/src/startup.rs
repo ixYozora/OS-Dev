@@ -33,7 +33,7 @@ use core::panic::PanicInfo;
 use devices::cga; // shortcut for cga
 use devices::cga_print; // used to import code needed by println! 
 use devices::keyboard; // shortcut for keyboard
-
+use devices::pit;
 use kernel::allocator;
 use kernel::cpu;
 use user::aufgabe1::text_demo;
@@ -42,10 +42,12 @@ use user::aufgabe2::heap_demo;
 use user::aufgabe2::sound_demo;
 use user::aufgabe4::coroutine_demo;
 use user::aufgabe4::thread_demo;
+use user::aufgabe5::aufgabe5_demo;
 use kernel::interrupts::idt;
 use kernel::interrupts::pic;
 use kernel::interrupts::intdispatcher;
 use kernel::interrupts::intdispatcher::INT_VECTORS;
+
 
 fn aufgabe1() {
     text_demo::run();
@@ -66,9 +68,7 @@ fn aufgabe2() {
 }
 
 fn aufgabe3(){
-    kprintln!("Initializing PIC");
-    pic::PIC.lock().init();
-    
+
     kprintln!("Initializing interrupts");
     INT_VECTORS.lock().init();
     idt::get_idt().load();
@@ -85,20 +85,39 @@ fn aufgabe4(){
     thread_demo::run();
 }
 
+fn aufgabe5(){
+    aufgabe5_demo::run();
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn startup() {
     kprintln!("Welcome to hhuTOS!");
+
     kprintln!("Initializing heap allocator");
     allocator::init();
-    cga::CGA.lock().clear();
-    
 
-    aufgabe3();
-    aufgabe4();
+    kprintln!("Initializing PIC");
+    pic::PIC.lock().init();
 
-    loop {
+    kprintln!("Initializing interrupts");
+    idt::get_idt().load();
+    intdispatcher::INT_VECTORS.lock().init();
 
-    }
+    kprintln!("Initializing keyboard");
+    keyboard::plugin();
+
+    kprintln!("Enabling interrupts");
+    cpu::enable_int();
+
+    kprintln!("Initializing PIT");
+    pit::plugin();
+
+    kprintln!("Boot sequence finished");
+
+    println!("Welcome to hhuTOSr!");
+
+
+    loop {}
 }
 
 

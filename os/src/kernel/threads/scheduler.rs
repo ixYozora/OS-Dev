@@ -1,18 +1,19 @@
 /* ╔═════════════════════════════════════════════════════════════════════════╗
- ║ Module: scheduler ║
- ╟─────────────────────────────────────────────────────────────────────────╢
- ║ Descr.: A basic round-robin scheduler for cooperative threads. ║
- ║ No priorities supported. ║
- ╟─────────────────────────────────────────────────────────────────────────╢
- ║ Autor: Michael Schoettner, 15.05.2023 ║
- ╚═════════════════════════════════════════════════════════════════════════╝
- */
+   ║ Module: scheduler                                                       ║
+   ╟─────────────────────────────────────────────────────────────────────────╢
+   ║ Descr.: A basic round-robin scheduler for cooperative threads.          ║
+   ║         No priorities supported.                                        ║
+   ╟─────────────────────────────────────────────────────────────────────────╢
+   ║ Autor:  Michael Schoettner, 15.05.2023                                  ║
+   ╚═════════════════════════════════════════════════════════════════════════╝
+*/
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Display;
 use core::{fmt, ptr};
 use core::sync::atomic::AtomicUsize;
 use spin::{Mutex, Once};
+use crate::kernel::allocator;
 use crate::kernel::threads::idle_thread::idle_thread;
 use crate::kernel::threads::thread;
 use crate::kernel::threads::thread::Thread;
@@ -29,7 +30,7 @@ pub fn get_scheduler() -> &'static Scheduler {
 /// Unlock the scheduler state.
 /// This function is called from assembly code.
 /// Usually, the mutex would be unlocked automatically when going out of scope.
-/// However, since we switch to a different thread in yield_cpu() and exit(),
+/// However, since we switch to a different thread in `yield_cpu()` and `exit()`,
 /// the scope is not left and the mutex remains locked.
 /// As a workaround, we provide this function to unlock the scheduler manually.
 #[unsafe(no_mangle)]
@@ -45,6 +46,7 @@ pub unsafe extern "C" fn unlock_scheduler() {
 struct SchedulerState {
     active_thread: Option<Box<Thread>>,
     ready_queue: LinkedQueue<Box<Thread>>,
+    initialized: bool,
 }
 
 /// Represents the scheduler.
@@ -60,9 +62,10 @@ impl Scheduler {
         let state = SchedulerState {
             active_thread: Some(Thread::new(idle_thread)),
             ready_queue: LinkedQueue::new(),
+            initialized: false,
         };
 
-        Scheduler { state: Mutex::new(state) }
+        Scheduler { state:  Mutex::new(state) }
     }
 
     /// Get the ID of the currently active thread.
@@ -76,9 +79,9 @@ impl Scheduler {
     /// This function must only be called once.
     pub fn schedule(&self) {
         let mut state = self.state.lock();
-
-        // The active thread is never None, since we must at least have the idle thread.
+        state.initialized = true;
         state.active_thread.as_mut().unwrap().start();
+
     }
 
     /// Register a new thread in the ready queue.
@@ -103,51 +106,58 @@ impl Scheduler {
 
         unsafe {
             // Switch to the next thread.
-            // current still contains the old thread we want to exit,
-            // while state.active_thread contains the next one.
+            // `current` still contains the old thread we want to exit,
+            // while `state.active_thread` contains the next one.
             Thread::switch(current.as_mut(), state.active_thread.as_mut().unwrap().as_mut());
         }
     }
 
     /// Yield the CPU and switch to the next thread in the ready queue.
     pub fn yield_cpu(&self) {
-        // let mut state = self.state.lock();
-        //
-        // // Move the current active thread to the end of the ready queue
-        // let mut current = state.active_thread.take().unwrap();
-        // state.ready_queue.enqueue(current);
-        //
-        // // Get the next thread from the front of the ready queue
-        // let next = state.ready_queue.dequeue().unwrap();
-        // state.active_thread = Some(next);
-        //
-        // unsafe {
-        // // Switch to the next thread
-        // Thread::switch(state.active_thread.as_mut().unwrap().as_mut(), state.active_thread.as_mut().unwrap().as_mut());
-        // }
+        if let Some(mut state) = self.state.try_lock() {
+            // Must be inited and not locked.
+            if !state.initialized {
+                return;
+            }
 
-        let mut state = self.state.lock();
+            if allocator::is_locked() {
+                return;
+            }
 
-        // Move current thread to back of ready queue
-        let mut current = state.active_thread.take().unwrap();
-        let current_ptr = &mut *current as *mut Thread;
-        state.ready_queue.enqueue(current);
+            let mut current = state.active_thread.take().unwrap();
+            //safe pointer because cant access after putting back in queue
+            let current_ptr = current.as_mut() as *mut Thread;
 
-        // Get next thread from front of queue
-        let next = state.ready_queue.dequeue().unwrap();
-        state.active_thread = Some(next);
-        let next_ptr = state.active_thread.as_mut().unwrap().as_mut() as *mut Thread;
-
-        unsafe {
-            Thread::switch(current_ptr, next_ptr);
+            //put active thread back in ready queue and get next thread
+            if let Some(next) = state.ready_queue.dequeue() {
+                state.active_thread = Some(next);
+                state.ready_queue.enqueue(current);
+                unsafe {
+                    Thread::switch(current_ptr, state.active_thread.as_mut().unwrap().as_mut());
+                }
+            } else {
+                // If there are no threads in the queue, we just keep the current thread.
+                state.active_thread = Some(current);
+            }
         }
     }
 
     /// Kill the thread with the given ID by removing it from the ready queue.
     pub fn kill(&self, to_kill_id: usize) {
+
         let mut state = self.state.lock();
-        // Remove thread from ready queue if it exists there
+
+        // If the thread to kill is the active thread, we exit it.
+        if let Some(active) = state.active_thread.as_mut() {
+            if active.get_id() == to_kill_id {
+                self.exit();
+                return;
+            }
+        }
+
+        // Otherwise, we search for the thread in the ready queue and remove it.
         state.ready_queue.remove(|thread| thread.get_id() == to_kill_id);
+
     }
 }
 

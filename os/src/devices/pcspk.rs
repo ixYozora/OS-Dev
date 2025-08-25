@@ -162,23 +162,28 @@ impl Speaker {
     fn delay(&mut self, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
-        if duration == 0 { return; }
+        let counter: u16 = 1193;
 
-        const CYCLES_PER_MS: usize = 100_000;
+        unsafe {
+            self.pit_ctrl_port.outb(0x34); //0x34 da 00 channel 0, 11 acces mode, 010 mode 2, 0 16 binary
+            self.pit_data0_port.outb((counter & 0xFF) as u8);
+            self.pit_data0_port.outb(((counter >> 8) & 0xFF) as u8);
+        }
 
-        let int_enabled = cpu::is_int_enabled();
-        cpu::disable_int();
+        let mut milliseconds_passed = 0;
+        let mut last_counter = self.read_counter();
 
-        for _ in 0..duration {
-            let mut cycles = CYCLES_PER_MS;
-            while cycles > 0 {
-                cycles -= 1;
-                let _ =  cycles.wrapping_mul(cycles);
+        // Wait for the specified duration
+        while milliseconds_passed < duration {
+            let current_counter = self.read_counter();
+
+            if current_counter > last_counter {
+                milliseconds_passed += 1;
             }
+
+            last_counter = current_counter;
         }
-        if int_enabled {
-            cpu::enable_int();
-        }
+
     }
 }
 

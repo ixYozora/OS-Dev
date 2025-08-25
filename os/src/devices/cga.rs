@@ -1,19 +1,3 @@
-
-impl Write for CGA {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.bytes() {
-            match byte {
-                // printable ASCII byte or newline
-                0x20..=0x7e | b'\n' => self.print_byte(byte),
-
-                // not part of printable ASCII range
-                _ => self.print_byte(0xfe),
-            }
-        }
-
-        Ok(())
-    }
-}
 /* ╔═════════════════════════════════════════════════════════════════════════╗
    ║ Module: cga                                                             ║
    ╟─────────────────────────────────────────────────────────────────────────╢
@@ -24,6 +8,7 @@ impl Write for CGA {
    ║ Author: Michael Schoetter, Univ. Duesseldorf, 6.2.2024                  ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
+use core::fmt::Write;
 use spin::Mutex;
 use crate::kernel::cpu as cpu;
 
@@ -56,8 +41,8 @@ pub enum Color {
 pub const CGA_STD_ATTR: u8 = (Color::Black as u8) << 4 | (Color::Green as u8);
 
 const CGA_BASE_ADDR: *mut u8 = 0xb8000 as *mut u8;
-const CGA_ROWS: usize = 25;
-const CGA_COLUMNS: usize = 80;
+pub(crate) const CGA_ROWS: usize = 25;
+pub(crate) const CGA_COLUMNS: usize = 80;
 
 const CGA_INDEX_PORT: u16 = 0x3d4; // select register
 const CGA_DATA_PORT: u16 = 0x3d5;  // read/write register
@@ -80,17 +65,12 @@ impl CGA {
 
     /// Clear CGA screen and set cursor position to (0, 0).
     pub fn clear(&mut self) {
-        /* Hier muss Code eingefuegt werden */
         for y in 0..CGA_ROWS {
             for x in 0..CGA_COLUMNS {
-                let pos = (y * CGA_COLUMNS + x) * 2;
-                unsafe {
-                    CGA_BASE_ADDR.offset(pos as isize).write(b' ');
-                    CGA_BASE_ADDR.offset((pos + 1) as isize).write(CGA_STD_ATTR);
-                }
+                self.show(x, y, 0 as char, CGA_STD_ATTR);
             }
         }
-        self.setpos(0, 0);
+        self.setpos(0,0);
     }
 
     /// Display the `character` at the given position `x`,`y` with attribute `attrib`.
@@ -114,105 +94,125 @@ impl CGA {
 
     /// Return cursor position `x`,`y`
     pub fn getpos(&mut self) -> (usize, usize) {
-        /* Hier muss Code eingefuegt werden */
+
+        let high;
+        let low;
         unsafe {
             self.index_port.outb(CGA_HIGH_BYTE_CMD);
-        }
-        let high = unsafe {
-            self.data_port.inb()
-        };
-        // Select low byte
-        unsafe {
+            high = self.data_port.inb();
             self.index_port.outb(CGA_LOW_BYTE_CMD);
+            low = self.data_port.inb();
         }
-        let low = unsafe {
-            self.data_port.inb()
-        };
-
-        let pos = ((high as u16) << 8) | (low as u16);
-        let x = (pos as usize) % CGA_COLUMNS;
+        //kprintln!("high : {}, low : {}", high, low);
+        let pos = (high as u16) << 8 | (low as u16);
+        //kprintln!("{}", pos);
         let y = (pos as usize) / CGA_COLUMNS;
-        (x, y) // Platzhalter, entfernen und durch sinnvollen Rueckgabewert ersetzen
+        //let x = (pos as usize) % CGA_COLUMNS;
+        let x = (pos as usize) - y* CGA_COLUMNS;
+
+
+
+        //kprintln!("x: {}, y: {}", x, y);
+
+        (x, y)
     }
 
     /// Set cursor position `x`,`y`
     pub fn setpos(&mut self, x: usize, y: usize) {
-        /* Hier muss Code eingefuegt werden */
-        let pos = (y * CGA_COLUMNS + x) as u16;
-        let high = (pos >> 8) as u8;
-        let low = (pos & 0xFF) as u8;
+        // if x > CGA_COLUMNS || y > CGA_ROWS {
+        //     return;
+        // }
+
+        let pos = y * CGA_COLUMNS + x;
 
         unsafe {
-            self.index_port.outb(CGA_HIGH_BYTE_CMD);
-            self.data_port.outb(high);
             self.index_port.outb(CGA_LOW_BYTE_CMD);
-            self.data_port.outb(low);
+            self.data_port.outb((pos & 0xff) as u8);
+            self.index_port.outb(CGA_HIGH_BYTE_CMD);
+            self.data_port.outb(((pos >> 8) & 0xff) as u8);
         }
     }
 
     /// Print byte `b` at actual position cursor position `x`,`y`
+    /// If byte is '\n' then we set cursor to new line
+    /// Before trying to print outside the screen we scroll up one line
     pub fn print_byte(&mut self, b: u8) {
-        /* Hier muss Code eingefuegt werden */
-        let (mut x, mut y) = self.getpos();
+        let pos = self.getpos();
 
-        match b {
-            b'\n' => {
-                x = 0;
-                y += 1;
-            }
-            byte => {
-                self.show(x, y, byte as char, CGA_STD_ATTR);
-                x += 1;
-                if x >= CGA_COLUMNS {
-                    x = 0;
-                    y += 1;
-                }
-            }
+        if b != b'\n' {
+            self.show(pos.0, pos.1, b as char, CGA_STD_ATTR);
         }
 
-        if y >= CGA_ROWS {
-            self.scrollup();
-            y = CGA_ROWS - 1;
+        if b == b'\n' || pos.0+1 >= CGA_COLUMNS  {
+            self.setpos(0, pos.1+1);
+            if pos.1+1 >= CGA_ROWS {
+                self.scrollup();
+            }
+            return;
         }
 
-        self.setpos(x, y);
+        self.setpos(pos.0 + 1, pos.1);
+
     }
 
     /// Scroll text lines by one to the top.
     pub fn scrollup(&mut self) {
-        /* Hier muss Code eingefuegt werden */
-        // Move each line up by one
-        for y in 1..CGA_ROWS {
+
+        for y in 0..CGA_ROWS-1 {
             for x in 0..CGA_COLUMNS {
-                let from = ((y * CGA_COLUMNS + x) * 2) as isize;
-                let to = (((y - 1) * CGA_COLUMNS + x) * 2) as isize;
+                let pos_old = (y * CGA_COLUMNS + x) * 2;
+                let pos_new = ((y+1) * CGA_COLUMNS + x) * 2;
                 unsafe {
-                    let ch = CGA_BASE_ADDR.offset(from).read();
-                    let attr = CGA_BASE_ADDR.offset(from + 1).read();
-                    CGA_BASE_ADDR.offset(to).write(ch);
-                    CGA_BASE_ADDR.offset(to + 1).write(attr);
+                    let new_char = CGA_BASE_ADDR.offset(pos_new as isize).read();
+                    let new_attr = CGA_BASE_ADDR.offset((pos_new+1) as isize).read();
+                    CGA_BASE_ADDR.offset(pos_old as isize).write(new_char);
+                    CGA_BASE_ADDR.offset((pos_old+1) as isize).write(new_attr);
                 }
             }
         }
-        // Clear the last line
+
+        //Clear last row
         for x in 0..CGA_COLUMNS {
-            let pos = ((CGA_ROWS - 1) * CGA_COLUMNS + x) * 2;
-            unsafe {
-                CGA_BASE_ADDR.offset(pos as isize).write(b' ');
-                CGA_BASE_ADDR.offset((pos + 1) as isize).write(CGA_STD_ATTR);
-            }
+            self.show(x, CGA_ROWS-1, 0 as char, CGA_STD_ATTR);
         }
+
+        let pos = self.getpos();
+        self.setpos(pos.0, pos.1 - 1);
     }
 
     /// Helper function returning an attribute byte for the given parameters `bg`, `fg`, and `blink`
     /// Note: Blinking characters do not work in QEMU, but work on real hardware.
     ///       Support for blinking characters is optional and can be removed, if you want.
     pub fn attribute(&mut self, bg: Color, fg: Color, blink: bool) -> u8 {
-        /* Hier muss Code eingefuegt werden */
-        let mut attr = ((bg as u8) << 4) | (fg as u8);
-        if blink {
-            attr |= 0x80;
+        //let res = (blink as u8) << 8 | (bg as u8) << 4 | (fg as u8);
+        (blink as u8) << 7 | (bg as u8) << 4 | (fg as u8)
+    }
+
+    /// deletes a char in fn
+    pub fn del(&mut self) {
+        let pos = self.getpos();
+        if pos.0 <= 0 {
+            self.setpos(CGA_COLUMNS-1, pos.1-1);
+            self.show(CGA_COLUMNS-1, pos.1-1, 0 as char, CGA_STD_ATTR);
+            return;
         }
-        attr
+        self.setpos(pos.0-1, pos.1);
+        self.show(pos.0-1, pos.1, 0 as char, CGA_STD_ATTR);
+    }
+}
+
+impl Write for CGA {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for byte in s.bytes() {
+            match byte {
+                // printable ASCII byte or newline
+                0x20..=0x7e | b'\n' => self.print_byte(byte),
+
+                // not part of printable ASCII range
+                _ => self.print_byte(0xfe),
+            }
+        }
+
+        Ok(())
     }
 }
