@@ -43,12 +43,17 @@ use user::aufgabe2::sound_demo;
 use user::aufgabe4::coroutine_demo;
 use user::aufgabe4::thread_demo;
 use user::aufgabe5::aufgabe5_demo;
+use crate::user::aufgabe7::graphic_demo;
 use kernel::interrupts::idt;
 use kernel::interrupts::pic;
 use kernel::interrupts::intdispatcher;
 use kernel::interrupts::intdispatcher::INT_VECTORS;
-
-
+use crate::cpu::IoPort;
+use crate::kernel::multiboot::FramebufferType;
+use crate::kernel::multiboot::MultibootInfo;
+use crate::devices::pci::get_pci_bus;
+use crate::devices::lfb::init_lfb;
+use crate::devices::pci::Command;
 fn aufgabe1() {
     text_demo::run();
     kprintln!("Welcome to hhuTOS!");
@@ -89,9 +94,29 @@ fn aufgabe5(){
     aufgabe5_demo::run();
 }
 
+#[unsafe(no_mangle)]
 pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
 
     /* Hier steht der existierende startup() Code bis `cpu::enable_interrupts()` */
+    allocator::init();
+
+    kprintln!("Initializing PIC");
+    pic::PIC.lock().init();
+
+    kprintln!("Initializing interrupts");
+    idt::get_idt().load();
+    intdispatcher::INT_VECTORS.lock().init();
+
+    kprintln!("Initializing keyboard");
+    keyboard::plugin();
+
+    kprintln!("Enabling interrupts");
+    cpu::enable_int();
+
+    kprintln!("Initializing PIT");
+    pit::plugin();
+
+    kprintln!("Boot sequence finished");
 
     kprintln!("Scanning PCI bus");
     for device in get_pci_bus().iter() {
@@ -104,54 +129,54 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
         device.read_vendor_id() == 0x10ec && device.read_device_id() == 0x8139
     });
 
-    if let Some(rtl8139) = rtl8139 {
-        kprintln!("Found Realtek RTL8139 network controller");
-
-        // Read the I/O base address from BAR0
-        let bar0 = rtl8139.read_bar(0);
-        if bar0 & 0x1 == 0 {
-            // The address in BAR0 is a 32-bit memory-mapped I/O address.
-            // This means that the registers are accessed via memory addresses instead of I/O ports.
-            // The card emulated by QEMU uses 16-bit I/O ports,
-            // so this code path is never executed in QEMU and is just here as a showcase.
-            let mmio_base = bar0 & 0xfffffff0;
-            kprintln!("RTL8139 MMIO base address: 0x{:x}", mmio_base);
-
-            // Enable MMIO access by setting the correct command bits in the PCI command register
-            rtl8139.write_command(rtl8139.read_command() | Command::MemEnable as u16);
-
-            // Read mac address from the RTL8139 registers -> Always at offset 0x00-0x05
-            // MMIO access is done via volatile reads to ensure the compiler does not optimize them away
-            let mac_address_ptr = (mmio_base) as *const u8;
-            let mac_address = unsafe {[
-                mac_address_ptr.add(0).read_volatile(),
-                mac_address_ptr.add(1).read_volatile(),
-                mac_address_ptr.add(2).read_volatile(),
-                mac_address_ptr.add(3).read_volatile(),
-                mac_address_ptr.add(4).read_volatile(),
-                mac_address_ptr.add(5).read_volatile()
-            ]};
-            kprintln!("MAC address: {:x?}", mac_address);
-        } else {
-            // The address in BAR0 is a 16-bit I/O port address
-            let io_base = (bar0 & 0xfffc) as u16;
-            kprintln!("RTL8139 I/O base address: 0x{:x}", io_base);
-
-            // Enable I/O access by setting the correct command bits in the PCI command register
-            rtl8139.write_command(rtl8139.read_command() | Command::IoEnable as u16);
-
-            // Read mac address from the RTL8139 registers -> Always at offset 0x00-0x05
-            let mac_address = unsafe {[
-                IoPort::new(io_base + 0).inb(),
-                IoPort::new(io_base + 1).inb(),
-                IoPort::new(io_base + 2).inb(),
-                IoPort::new(io_base + 3).inb(),
-                IoPort::new(io_base + 4).inb(),
-                IoPort::new(io_base + 5).inb()
-            ]};
-            kprintln!("MAC address: {:x?}", mac_address);
-        }
-    }
+    // if let Some(rtl8139) = rtl8139 {
+    //     kprintln!("Found Realtek RTL8139 network controller");
+    //
+    //     // Read the I/O base address from BAR0
+    //     let bar0 = rtl8139.read_bar(0);
+    //     if bar0 & 0x1 == 0 {
+    //         // The address in BAR0 is a 32-bit memory-mapped I/O address.
+    //         // This means that the registers are accessed via memory addresses instead of I/O ports.
+    //         // The card emulated by QEMU uses 16-bit I/O ports,
+    //         // so this code path is never executed in QEMU and is just here as a showcase.
+    //         let mmio_base = bar0 & 0xfffffff0;
+    //         kprintln!("RTL8139 MMIO base address: 0x{:x}", mmio_base);
+    //
+    //         // Enable MMIO access by setting the correct command bits in the PCI command register
+    //         rtl8139.write_command(rtl8139.read_command() | Command::MemEnable as u16);
+    //
+    //         // Read mac address from the RTL8139 registers -> Always at offset 0x00-0x05
+    //         // MMIO access is done via volatile reads to ensure the compiler does not optimize them away
+    //         let mac_address_ptr = (mmio_base) as *const u8;
+    //         let mac_address = unsafe {[
+    //             mac_address_ptr.add(0).read_volatile(),
+    //             mac_address_ptr.add(1).read_volatile(),
+    //             mac_address_ptr.add(2).read_volatile(),
+    //             mac_address_ptr.add(3).read_volatile(),
+    //             mac_address_ptr.add(4).read_volatile(),
+    //             mac_address_ptr.add(5).read_volatile()
+    //         ]};
+    //         kprintln!("MAC address: {:x?}", mac_address);
+    //     } else {
+    //         // The address in BAR0 is a 16-bit I/O port address
+    //         let io_base = (bar0 & 0xfffc) as u16;
+    //         kprintln!("RTL8139 I/O base address: 0x{:x}", io_base);
+    //
+    //         // Enable I/O access by setting the correct command bits in the PCI command register
+    //         rtl8139.write_command(rtl8139.read_command() | Command::IoEnable as u16);
+    //
+    //         // Read mac address from the RTL8139 registers -> Always at offset 0x00-0x05
+    //         let mac_address = unsafe {[
+    //             IoPort::new(io_base + 0).inb(),
+    //             IoPort::new(io_base + 1).inb(),
+    //             IoPort::new(io_base + 2).inb(),
+    //             IoPort::new(io_base + 3).inb(),
+    //             IoPort::new(io_base + 4).inb(),
+    //             IoPort::new(io_base + 5).inb()
+    //         ]};
+    //         kprintln!("MAC address: {:x?}", mac_address);
+    //     }
+    // }
 
 
     // Check the framebuffer type and either show the CGA menu or initialize the linear framebuffer (LFB)
