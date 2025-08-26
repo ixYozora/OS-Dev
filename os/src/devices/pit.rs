@@ -7,11 +7,13 @@
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 use alloc::boxed::Box;
+use alloc::format;
 use core::arch::asm;
 use core::sync::atomic::AtomicUsize;
 use spin::Once;
 use crate::devices::cga;
 use crate::devices::cga::{Color, CGA, CGA_COLUMNS, CGA_ROWS};
+use crate::devices::lfb::{BLACK, get_lfb, is_lfb_initialized, RED, WHITE};
 use crate::kernel::cpu;
 use crate::kernel::cpu::IoPort;
 use crate::kernel::interrupts::{intdispatcher, pic};
@@ -54,16 +56,6 @@ pub fn wait(ms: usize) {
 
 }
 
-/// Returns (hours, minutes, seconds)
-pub fn uptime_hms() -> (usize, usize, usize) {
-    let total_secs = get_system_time() / 1000;
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let seconds = total_secs % 60;
-    (hours, minutes, seconds)
-}
-
-
 /* ╔═════════════════════════════════════════════════════════════════════════╗
    ║ Interrupt service routine implementation.                               ║
    ╚═════════════════════════════════════════════════════════════════════════╝ */
@@ -97,15 +89,32 @@ impl ISR for TimerISR {
         let current_time = SYSTEM_TIME.fetch_add(self.interval_ms, core::sync::atomic::Ordering::Relaxed);
 
         //careful with interrupts...
-        if !get_scheduler().is_locked() && !is_locked() && !cga::CGA.is_queue_locked() {
-            //update spinner every 250 ms
-            if current_time % 250 == 0 {
-                if let Some(mut cga) = CGA.try_lock() {
+        // if !get_scheduler().is_locked() && !is_locked() && !cga::CGA.is_queue_locked() {
+        //     //update spinner every 250 ms
+        //     if current_time % 250 == 0 {
+        //         if let Some(mut cga) = CGA.try_lock() {
+        //             let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
+        //             let spinner_char = SPINNER_CHARS[spinner_index];
+        //             //cga.setpos(CGA_COLUMNS - 1, 0);
+        //             //cga.print_byte(spinner_char as u8);
+        //             cga.show(CGA_COLUMNS - 1, 0, spinner_char, 4);
+        //         }
+        //     }
+        // }
+
+        // //now for lfb
+        if current_time % 250 == 0 {
+            //update spinner every 1000 ms
+            if !get_scheduler().is_locked() && !is_locked() && is_lfb_initialized() {
+                if let Some(mut lfb) = get_lfb().try_lock() {
                     let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
                     let spinner_char = SPINNER_CHARS[spinner_index];
-                    //cga.setpos(CGA_COLUMNS - 1, 0);
-                    //cga.print_byte(spinner_char as u8);
-                    cga.show(CGA_COLUMNS - 1, 0, spinner_char, 4);
+
+                    let (width, height) = lfb.get_dimensions();
+                    let (char_width, char_height) = lfb.get_char_dimensions();
+                    lfb.draw_char_with_background(
+                        width - (2*char_width), char_height + 2, RED, BLACK, spinner_char
+                    );
                 }
             }
         }

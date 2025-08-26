@@ -5,7 +5,7 @@ use core::ops::{Deref, DerefMut};
 use core::ptr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::kernel::cpu;
-use crate::kernel::threads::scheduler::get_scheduler;
+use crate::kernel::threads::scheduler::{get_scheduler, SCHEDULER_ACTIVE};
 use crate::kernel::threads::thread::Thread;
 use crate::library::queue::LinkedQueue;
 use crate::library::spinlock::Spinlock;
@@ -57,8 +57,8 @@ impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<T> {
 
         // act as a spinlock if scheduler is not initialized
-        if !get_scheduler().is_initialized() {
-            kprintln!("Mutex::lock() called before scheduler initialization, acting as a spinlock.");
+        if !SCHEDULER_ACTIVE.load(Ordering::Relaxed) {
+            //kprintln!("Mutex::lock() called before scheduler initialization, acting as a spinlock.");
 
             let mut before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
             while before {
@@ -118,16 +118,18 @@ impl<T> Mutex<T> {
 
         self.lock.store(false, Ordering::Release);
 
-        if !get_scheduler().is_initialized() {
+        if !SCHEDULER_ACTIVE.load(Ordering::Relaxed) {
             return;
         }
 
         //own scope, because of locking mutex itself
         {
-            let mut wait_queue = self.wait_queue.lock();
-            if let Some(next_thread) = wait_queue.dequeue() {
-                // Wake up the next thread in the queue
-                get_scheduler().ready(next_thread);
+            //fix von rafael
+            let old_int = cpu::disable_int_nested();
+            let dequeued = self.wait_queue.lock().dequeue();
+            cpu::enable_int_nested(old_int);
+            if let Some(thread) = dequeued {
+                get_scheduler().ready_after_block(thread);
             }
         }
     }

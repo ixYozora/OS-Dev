@@ -4,4 +4,4 @@ pub const STACK_ALIGNMENT: usize = 8;
 pub const STACK_ENTRY_SIZE: usize = 8;
 
 pub const HEAP_START: usize = 0x800000;            // 8 MB -> max image size = 7 MB 
-pub const HEAP_SIZE: usize  = 16 * 1024 * 1024;    // 16 MB heap size
+pub const HEAP_SIZE: usize  = 32 * 1024 * 1024;    // 16 MB heap size

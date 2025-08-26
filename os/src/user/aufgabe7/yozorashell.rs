@@ -70,6 +70,13 @@ fn run_sound_demo() {
     lfb_set_color(WHITE);
 }
 
+fn run_heap_demo() {
+    crate::user::aufgabe2::heap_demo::run();
+    lfb_set_color(HHU_GREEN);
+    lfb_print!("yozora$ ");
+    lfb_set_color(WHITE);
+}
+
 fn run_graphics_demo() {
     // This function now correctly calls the simplified demo run function.
     graphic_demo::run();
@@ -390,8 +397,12 @@ impl YozoraShell {
                 get_scheduler().ready(t);
             }
             "keyboard" => {
-                lfb_print!("Launching keyboard demo in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_keyboard_demo);
+                lfb_print!("Launching keyboard demo synchronously (blocking)...\n");
+                run_keyboard_demo();
+            }
+            "heap" => {
+                lfb_print!("Launching heap in background thread...\n");
+                let t = crate::kernel::threads::thread::Thread::new(run_heap_demo);
                 get_scheduler().ready(t);
             }
             "sound" => {
@@ -414,9 +425,8 @@ impl YozoraShell {
             }
         }
     }
-
-
 }
+
 
 /// convenience entrypoint used by your kernel
 pub fn launch() {

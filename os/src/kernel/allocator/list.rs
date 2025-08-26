@@ -11,6 +11,7 @@ use super::{align_up, Locked};
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::{mem, ptr};
 use crate::kernel::allocator::bump::BumpAllocator;
+use crate::lfb_print;
 use crate::kernel::cpu as cpu;
 
 /// Header of a free block in the list allocator.
@@ -130,46 +131,56 @@ impl LinkedListAllocator {
     }
 
     /// Dump the free list for debugging purposes.
+    // pub fn dump_free_list(&mut self) {
+    //
+    //     /* Hier muss Code eingefuegt werden */
+    //     let mut current = &self.head.next;
+    //     // kprintln!("Free list:");
+    //     while let Some(node) = current {
+    //       //  kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
+    //         current = &node.next;
+    //     }
+    // }
+
+    /// Dump the free list for debugging purposes.
     pub fn dump_free_list(&mut self) {
 
-        /* Hier muss Code eingefuegt werden */
-        let mut current = &self.head.next;
-        // kprintln!("Free list:");
-        while let Some(node) = current {
-          //  kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
-            current = &node.next;
+        lfb_print!("Dumping free memory list (including dummy element)\n");
+        lfb_print!("  Heap start:  {:#x}, heap end:  {:#x}\n", self.heap_start, self.heap_end);
+
+        let mut current = &mut self.head;
+        while let Some(ref block) = current.next {
+            lfb_print!("  Block start: {:#x}, block end: {:#x}. block size: {}\n",
+                  block.start_addr(), block.end_addr(), block.size);
+            current = current.next.as_mut().unwrap();
         }
+        lfb_print!(" \n");
     }
 
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-
-        /* Hier muss Code eingefuegt werden */
-        //kprint!("list-alloc: size={}, align={}", layout.size(), layout.align());
         let (size, align) = Self::size_align(layout);
         let mut prev = &mut self.head;
+
         while let Some(ref mut node) = prev.next {
             let alloc_start = super::align_up(node.start_addr() + mem::size_of::<ListNode>(), align);
             let alloc_end = alloc_start.checked_add(size).unwrap();
+
             if alloc_end <= node.end_addr() {
                 let excess_size = node.end_addr() - alloc_end;
-                let split = excess_size > mem::size_of::<ListNode>();
-                let result = alloc_start as *mut u8;
-                // Save next pointer and node address before dropping the borrow
+                let split = excess_size >= mem::size_of::<ListNode>(); // Use >= instead of >
+
+                // Remove the node from the list
                 let node_next = node.next.take();
-                let node_addr = node.start_addr();
-                // If splitting, save info for later
-                prev.next = node_next; // Drop the borrow to node here
+                prev.next = node_next;
+
+                // If there's enough space for another block, add it back
                 if split {
                     unsafe {
                         self.add_free_block(alloc_end, excess_size);
                     }
-                    // Now, update the size of the original node (which is no longer in the list)
-                    let node_ptr = node_addr as *mut ListNode;
-                    unsafe {
-                        (*node_ptr).size = alloc_start - node_addr;
-                    }
                 }
-                return result;
+
+                return alloc_start as *mut u8;
             }
             prev = prev.next.as_mut().unwrap();
         }
@@ -177,10 +188,13 @@ impl LinkedListAllocator {
     }
 
     pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        /* Hier muss Code eingefuegt werden */
         let (size, _) = Self::size_align(layout);
+        // Calculate the actual block start (including the ListNode header space)
+        let block_start = ptr as usize - mem::size_of::<ListNode>();
+        let total_size = size + mem::size_of::<ListNode>();
+
         unsafe {
-            self.add_free_block(ptr as usize, size);
+            self.add_free_block(block_start, total_size);
         }
     }
 

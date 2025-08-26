@@ -11,14 +11,14 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Display;
 use core::{fmt, ptr};
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 use spin::{Mutex, Once};
-use crate::kernel::allocator;
+use crate::kernel::{allocator, cpu};
+use crate::kernel::cpu::enable_int_nested;
 use crate::kernel::threads::idle_thread::idle_thread;
 use crate::kernel::threads::thread;
 use crate::kernel::threads::thread::Thread;
 use crate::library::queue::LinkedQueue;
-use crate::cpu;
 
 /// Global scheduler instance
 static SCHEDULER: Once<Scheduler> = Once::new();
@@ -27,6 +27,9 @@ static SCHEDULER: Once<Scheduler> = Once::new();
 pub fn get_scheduler() -> &'static Scheduler {
     SCHEDULER.call_once(|| { Scheduler::new() })
 }
+
+/// Global flag to indicate if the scheduler is active.
+pub static SCHEDULER_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Unlock the scheduler state.
 /// This function is called from assembly code.
@@ -47,7 +50,6 @@ pub unsafe extern "C" fn unlock_scheduler() {
 struct SchedulerState {
     active_thread: Option<Box<Thread>>,
     ready_queue: LinkedQueue<Box<Thread>>,
-    initialized: bool,
 }
 
 /// Represents the scheduler.
@@ -63,7 +65,7 @@ impl Scheduler {
         let state = SchedulerState {
             active_thread: Some(Thread::new(idle_thread)),
             ready_queue: LinkedQueue::new(),
-            initialized: false,
+            //initialized: false,
         };
 
         Scheduler { state:  Mutex::new(state) }
@@ -80,7 +82,8 @@ impl Scheduler {
     /// This function must only be called once.
     pub fn schedule(&self) {
         let mut state = self.state.lock();
-        state.initialized = true;
+        //state.initialized = true;
+        SCHEDULER_ACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         state.active_thread.as_mut().unwrap().start();
 
     }
@@ -92,13 +95,18 @@ impl Scheduler {
         state.ready_queue.enqueue(thread);
     }
 
+    pub fn ready_after_block(&self, thread: Box<Thread>) {
+        let mut state = self.state.lock();
+        // If the scheduler is active, we switch to the new thread.
+        state.ready_queue.enqueue(thread);
+    }
+
     /// Terminate the current (calling) thread and switch to the next one.
     pub fn exit(&self) {
         let mut state = self.state.lock();
 
-        // The active thread is never None, since we must at least have the idle thread.
         let mut current = state.active_thread.take().unwrap();
-        // The idle thread never exits, so there must be at least one thread in the queue.
+
         let next = state.ready_queue.dequeue().unwrap();
 
         // Set the dequeued thread as the active thread,
@@ -106,9 +114,6 @@ impl Scheduler {
         state.active_thread = Some(next);
 
         unsafe {
-            // Switch to the next thread.
-            // `current` still contains the old thread we want to exit,
-            // while `state.active_thread` contains the next one.
             Thread::switch(current.as_mut(), state.active_thread.as_mut().unwrap().as_mut());
         }
     }
@@ -117,7 +122,7 @@ impl Scheduler {
     pub fn yield_cpu(&self) {
         if let Some(mut state) = self.state.try_lock() {
             // Must be inited and not locked.
-            if !state.initialized {
+            if !SCHEDULER_ACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
                 return;
             }
 
@@ -141,6 +146,7 @@ impl Scheduler {
                 state.active_thread = Some(current);
             }
         }
+
     }
 
     /// Kill the thread with the given ID by removing it from the ready queue.
@@ -166,17 +172,6 @@ impl Scheduler {
         self.state.is_locked()
     }
 
-    pub fn is_initialized(&self) -> bool {
-
-
-        let state = self.state.lock();
-
-
-        state.initialized
-
-
-    }
-
     /// Prepare the current thread for blocking.
     /// This functions disables interrupts and return the current thread,
     /// as well as the return value from `cpu::disable_int_nested()`.
@@ -184,18 +179,8 @@ impl Scheduler {
     /// which will enable interrupts again and resume the scheduler.
     pub fn prepare_block(&self) -> (Box<Thread>, bool) {
 
-        let mut state = self.state.lock();
-
-        // Must be inited and not locked.
-        if !state.initialized {
-            panic!("Scheduler not initialized");
-        }
-
-        if allocator::is_locked() {
-            panic!("Allocator is locked, cannot block");
-        }
-
         let interrupts_enabled = cpu::disable_int_nested();
+        let mut state = self.state.lock();
         let current_thread = state.active_thread.take().unwrap();
 
         (current_thread, interrupts_enabled)
@@ -208,27 +193,26 @@ impl Scheduler {
 
         let mut state = self.state.lock();
 
-        if let Some(mut next_thread) = state.ready_queue.dequeue() {
+        if let Some(next_thread) = state.ready_queue.dequeue() {
 
             state.active_thread = Some(next_thread);
 
             unsafe {
                 Thread::switch(blocked_thread, state.active_thread.as_mut().unwrap().as_mut());
             }
-
+            enable_int_nested(interrupts_enabled);
         } else {
             unsafe {
                 state.active_thread = Some(Box::from_raw(blocked_thread));
             }
+            drop(state);
+            enable_int_nested(interrupts_enabled);
+            self.yield_cpu();
         }
 
-        cpu::enable_int_nested(interrupts_enabled);
 
     }
-
 }
-
-
 
 impl Display for Scheduler {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

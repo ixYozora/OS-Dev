@@ -160,7 +160,7 @@ impl Speaker {
     fn delay(&mut self, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
-        let counter: u16 = 1193;
+        let counter: u16 = 500;
 
         unsafe {
             self.pit_ctrl_port.outb(0x34); //0x34 da 00 channel 0, 11 acces mode, 010 mode 2, 0 16 binary

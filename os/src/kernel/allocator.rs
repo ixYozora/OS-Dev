@@ -20,12 +20,13 @@
 use alloc::alloc::Layout;
 use crate::kernel::allocator::bump::BumpAllocator;
 use crate::kernel::allocator::list::LinkedListAllocator;
+use crate::consts;
 
 pub mod bump;
 pub mod list;
 
 const HEAP_START: usize = 0x800000;
-const HEAP_SIZE: usize = 16 * 1024 * 1024; // 1 MiB heap size
+const HEAP_SIZE: usize = consts::HEAP_SIZE; // 1 MiB heap size
 
 // Define the allocator (which implements the 'GlobalAlloc' trait)
 #[global_allocator]
@@ -55,7 +56,7 @@ pub fn dealloc(ptr: *mut u8, layout: Layout) {
 
 /// Dump heap free list. Must be called by own program.
 /// Can be used for debugging the heap allocator.
-pub fn dump_free_list() {
+pub fn dump_free_list_lfb() {
     ALLOCATOR.lock().dump_free_list();
 }
 

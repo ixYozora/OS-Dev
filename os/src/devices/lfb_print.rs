@@ -68,7 +68,7 @@ impl Writer {
                 }
 
                 if self.cursor_y + char_height > screen_height {
-                    lfb.scroll(char_height);
+                    lfb.scroll_up();
                     self.cursor_y -= char_height;
                 }
 
@@ -86,7 +86,7 @@ impl Writer {
         self.cursor_y += char_height;
 
         if self.cursor_y + char_height > screen_height {
-            lfb.scroll(char_height);
+            lfb.scroll_up();
             self.cursor_y -= char_height;
         }
     }
@@ -107,7 +107,9 @@ impl Writer {
             self.cursor_x = ((screen_width / char_width) - 1) * char_width;
         }
     }
+
 }
+
 
 /// Implementation of the 'core::fmt::Write' trait for our Writer.
 /// Required to output formatted strings.

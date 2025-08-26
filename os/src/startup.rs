@@ -57,38 +57,6 @@ use crate::devices::lfb::init_lfb;
 use crate::devices::pci::Command;
 use crate::kernel::threads::scheduler::get_scheduler;
 use crate::kernel::threads::thread::Thread;
-fn aufgabe1() {
-    text_demo::run();
-
-    // println!("");
-    keyboard_demo::run();
-}
-fn aufgabe2() {
-    heap_demo::run();
-    //sound_demo::run();
-}
-
-fn aufgabe3(){
-
-    kprintln!("Initializing interrupts");
-    INT_VECTORS.lock().init();
-    idt::get_idt().load();
-
-    kprintln!("Initializing keyboard");
-    keyboard::plugin();
-
-    kprintln!("Enabling interrupts");
-    cpu::enable_int();
-}
-
-fn aufgabe4(){
-    //coroutine_demo::run();
-    thread_demo::run();
-}
-
-fn aufgabe5(){
-    aufgabe5_demo::run();
-}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn startup(multiboot_info: &MultibootInfo) {

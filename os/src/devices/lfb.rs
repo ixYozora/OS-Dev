@@ -1,4 +1,5 @@
 use alloc::string::ToString;
+use core::sync::atomic::AtomicBool;
 use spin::Once;
 use crate::devices::font_8x8;
 use crate::library::mutex::Mutex;
@@ -6,22 +7,28 @@ use crate::library::mutex::Mutex;
 /// Global Linear Framebuffer (LFB) instance.
 static LFB: Once<Mutex<LFB>> = Once::new();
 
+static LFB_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
 /// Initialize the Linear Framebuffer (LFB).
 pub fn init_lfb(addr: *mut u8, pitch: u32, width: u32, height: u32, bpp: u8) {
-    LFB.call_once(|| { 
+    LFB.call_once(|| {
         Mutex::new(LFB::new(addr, pitch, width, height, bpp))
     });
+    if !LFB_INITIALIZED.load(core::sync::atomic::Ordering::Relaxed) {
+        LFB_INITIALIZED.store(true, core::sync::atomic::Ordering::Relaxed);
+    } else {
+        panic!("LFB already initialized!");
+    }
 }
 
 /// Global access to the Linear Framebuffer (LFB).
 pub fn get_lfb() -> &'static Mutex<LFB> {
     LFB.get().expect("LFB not initialized")
 }
-/// Returns `true` if the LFB has been initialized.
-pub fn is_lfb_initialized() -> bool {
-    LFB.get().is_some()
-}
 
+pub fn is_lfb_initialized() -> bool {
+    LFB_INITIALIZED.load(core::sync::atomic::Ordering::Relaxed)
+}
 
 /// Represents a Linear Framebuffer (LFB) for graphics output.
 /// The framebuffer is expected to be in 32-bit ARGB format.
@@ -98,7 +105,7 @@ impl LFB {
         if bpp != 32 {
             panic!("Only 32-bit per pixel (ARGB) format is supported for LFB");
         }
-        
+
         LFB { addr, pitch, width, height }
     }
 
@@ -106,19 +113,27 @@ impl LFB {
     pub fn get_dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
     }
-    
+
     /// Get the width and height of a character in the font used by the framebuffer.
     pub fn get_char_dimensions(&self) -> (u32, u32) {
         (font_8x8::CHAR_WIDTH, font_8x8::CHAR_HEIGHT)
     }
-    
+
+    pub fn get_base_addr(&self) -> *mut u8 {
+        self.addr
+    }
+
+    pub fn get_pitch(&self) -> u32 {
+        self.pitch
+    }
+
     /// Clear the framebuffer by filling it with black pixels.
     pub fn clear(&mut self) {
         unsafe {
             self.addr.write_bytes(0, (self.pitch * self.height) as usize);
         }
     }
-    
+
     /// Draw a pixel at the specified (x, y) coordinates with the given color.
     /// This method checks the bounds of the framebuffer before drawing
     /// and omits drawing if the coordinates are out of bounds.
@@ -129,20 +144,42 @@ impl LFB {
             }
         }
     }
-    
+
     /// Draw a pixel at the specified (x, y) coordinates with the given color.
     /// This method does not check the bounds of the framebuffer.
     /// This is faster than `draw_pixel` but the caller must ensure that the coordinates are valid.
     /// Drawing outside the framebuffer may lead to undefined behavior.
     pub unsafe fn draw_pixel_unchecked(&mut self, x: u32, y: u32, color: u32) {
         let offset = (y * self.pitch + x * 4) as usize;
-        
+
         unsafe {
             let pixel_ptr = self.addr.add(offset) as *mut u32;
             *pixel_ptr = color;
         }
     }
-    
+
+    pub fn fill_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32) {
+        let draw_height = if y + height > self.height {
+            self.height - y
+        } else {
+            height
+        };
+
+        let draw_width = if x + width > self.width {
+            self.width - x
+        } else {
+            width
+        };
+
+        for dy in 0..draw_height {
+            for dx in 0..draw_width {
+                unsafe {
+                    self.draw_pixel_unchecked(x + dx, y + dy, color);
+                }
+            }
+        }
+    }
+
     /// Draw a bitmap image at the specified (x, y) coordinates with the given width and height.
     pub fn draw_bitmap(&mut self, x: u32, y: u32, width: u32, height: u32, bitmap: &[u8]) {
         let draw_height = if y + height > self.height {
@@ -150,7 +187,7 @@ impl LFB {
         } else {
             height
         };
-        
+
         let draw_width = if x + width > self.width {
             self.width - x
         } else {
@@ -188,30 +225,54 @@ impl LFB {
         self.draw_str(x, y, color, str::from_utf8(&[c as u8]).unwrap());
     }
 
-    pub fn scroll_up(&mut self) {
-        self.scroll(font_8x8::CHAR_HEIGHT);
+    pub fn draw_str_with_background(&mut self, x: u32, y: u32, fg: u32, bg: u32, str: &str) {
+        let char_width  = font_8x8::CHAR_WIDTH;
+        let char_height = font_8x8::CHAR_HEIGHT;
+        let width_byte = if char_width % 8 == 0 {
+            char_width / 8
+        } else {
+            char_width / 8 + 1
+        };
+
+        let mut current_char_xpos = x;
+
+        for c in str.chars() {
+            self.draw_char_with_background(current_char_xpos, y, fg, bg, c);
+            current_char_xpos += char_width;
+        }
     }
 
-    pub fn scroll(&mut self, rows: u32) {
-        if rows >= self.height {
-            self.clear();
-            return;
-        }
+    pub fn draw_char_with_background(&mut self, x: u32, y: u32, fg: u32, bg: u32, c: char) {
+        let char_width  = font_8x8::CHAR_WIDTH;
+        let char_height = font_8x8::CHAR_HEIGHT;
+        let width_byte = if char_width % 8 == 0 {
+            char_width / 8
+        } else {
+            char_width / 8 + 1
+        };
 
-        unsafe {
-            let byte_rows = (rows * self.pitch) as usize;
-            let total_bytes = (self.height * self.pitch) as usize;
+        let char_pixels = LFB::get_char_pixels(c);
+        let mut pixel_index = 0;
 
-            // Move memory up
-            core::ptr::copy(
-                self.addr.add(byte_rows),
-                self.addr,
-                total_bytes - byte_rows,
-            );
+        for y_offset in 0..char_height {
+            let mut xpos = x;
+            let ypos = y + y_offset;
 
-            // Clear the bottom rows
-            self.addr.add(total_bytes - byte_rows)
-                .write_bytes(0, byte_rows);
+            for byte in 0..width_byte {
+                for bit in (0..8).rev() {
+                    if ((1 << bit) & char_pixels[pixel_index]) != 0 {
+                        unsafe {
+                            self.draw_pixel_unchecked(xpos, ypos, fg);
+                        }
+                    } else {
+                        unsafe {
+                            self.draw_pixel_unchecked(xpos, ypos, bg);
+                        }
+                    }
+                    xpos += 1;
+                }
+                pixel_index += 1;
+            }
         }
     }
 
@@ -230,7 +291,7 @@ impl LFB {
         for c in str.chars() {
             let char_pixels = LFB::get_char_pixels(c);
             let mut pixel_index = 0;
-            
+
             for y_offset in 0..char_height {
                 let mut xpos = current_char_xpos;
                 let ypos = y + y_offset;
@@ -249,6 +310,37 @@ impl LFB {
             }
 
             current_char_xpos += char_width;
+        }
+    }
+
+    pub fn empty_char(&mut self, x: u32, y: u32) {
+        let (char_width, char_height) = self.get_char_dimensions();
+
+        for i in 0..char_height {
+            for j in 0..char_width {
+                self.draw_pixel(x + j, y + i, BLACK);
+            }
+        }
+    }
+
+    pub fn scroll_up(&mut self) {
+        let (char_width, char_height) = self.get_char_dimensions();
+
+        let to_copy = (self.width * self.height * 4) - self.get_pitch() * char_height;
+
+        unsafe {
+            core::ptr::copy(
+                self.addr.add((char_height * self.pitch) as usize),
+                self.addr,
+                to_copy as usize,
+            );
+
+            // Clear the last line
+            core::ptr::write_bytes(
+                self.addr.add(to_copy as usize),
+                0,
+                (self.pitch * char_height) as usize,
+            );
         }
     }
 }
