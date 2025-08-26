@@ -132,15 +132,13 @@ impl Speaker {
 
     /// Turn off the speaker.
     pub fn off(&mut self) {
-
-        /* Hier muss Code eingefuegt werden */
         unsafe {
             let mut val = self.ppi_port.inb();
-            val |= 0x03;
+            val &= !0x03; // Bits 0 und 1 auf 0 setzen
             self.ppi_port.outb(val);
         }
-
     }
+
 
     /// Return the current value of the PIT counter (16-bit).
     /// Used by `delay()` to check if the counter has reached 0 or has been reloaded.

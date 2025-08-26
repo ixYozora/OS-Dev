@@ -15,3 +15,5 @@ pub mod pit;
 pub mod font_8x8;
 pub mod lfb;
 pub mod pci;
+
+pub mod lfb_print;

@@ -17,6 +17,11 @@ pub fn init_lfb(addr: *mut u8, pitch: u32, width: u32, height: u32, bpp: u8) {
 pub fn get_lfb() -> &'static Mutex<LFB> {
     LFB.get().expect("LFB not initialized")
 }
+/// Returns `true` if the LFB has been initialized.
+pub fn is_lfb_initialized() -> bool {
+    LFB.get().is_some()
+}
+
 
 /// Represents a Linear Framebuffer (LFB) for graphics output.
 /// The framebuffer is expected to be in 32-bit ARGB format.
@@ -181,6 +186,33 @@ impl LFB {
     /// Draw a single character at the specified (x, y) coordinates with the given color.
     pub fn draw_char(&mut self, x: u32, y: u32, color: u32, c: char) {
         self.draw_str(x, y, color, str::from_utf8(&[c as u8]).unwrap());
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll(font_8x8::CHAR_HEIGHT);
+    }
+
+    pub fn scroll(&mut self, rows: u32) {
+        if rows >= self.height {
+            self.clear();
+            return;
+        }
+
+        unsafe {
+            let byte_rows = (rows * self.pitch) as usize;
+            let total_bytes = (self.height * self.pitch) as usize;
+
+            // Move memory up
+            core::ptr::copy(
+                self.addr.add(byte_rows),
+                self.addr,
+                total_bytes - byte_rows,
+            );
+
+            // Clear the bottom rows
+            self.addr.add(total_bytes - byte_rows)
+                .write_bytes(0, byte_rows);
+        }
     }
 
     /// Draw a string at the specified (x, y) coordinates with the given color.

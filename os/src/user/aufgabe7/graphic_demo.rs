@@ -1,3 +1,5 @@
+// graphic_demo.rs
+
 use crate::devices::lfb::{get_lfb, HHU_BLUE, HHU_GREEN, LFB};
 use crate::devices::pcspk;
 use crate::kernel::threads::scheduler::get_scheduler;
@@ -6,17 +8,26 @@ use crate::user::aufgabe7::bmp_hhu;
 
 const MESSAGE: &str = "Welcome to hhuTOS!";
 
+// BEFORE: This function was incorrect because it calls the scheduler.
+/*
 pub fn run() {
     let draw_thread = Thread::new(draw_demo);
     let sound_thread = Thread::new(pcspk::tetris);
-    
+
     let scheduler = get_scheduler();
     scheduler.ready(draw_thread);
     scheduler.ready(sound_thread);
     scheduler.schedule();
 }
+*/
 
-fn draw_demo() {
+// AFTER: The run function IS the demo. It no longer manages threads or the scheduler.
+pub fn run() {
+    // Start a background thread for the sound so it can play during the drawing.
+    let sound_thread = Thread::new(pcspk::tetris);
+    get_scheduler().ready(sound_thread);
+
+    // Lock the framebuffer to get exclusive access for drawing.
     let mut lfb = get_lfb().lock();
     let dimensions = lfb.get_dimensions();
 
@@ -24,8 +35,6 @@ fn draw_demo() {
     for y in 0..dimensions.1 {
         for x in 0..dimensions.0 {
             let color = linear_interpolate_2d(x, y, dimensions.0, dimensions.1, 0x0000ff, 0x00ff00, 0xff0000, 0xffff00);
-
-            // No need to check bounds here, as the loop ensures x and y are within the framebuffer dimensions
             unsafe {
                 lfb.draw_pixel_unchecked(x, y, color);
             }
@@ -40,8 +49,12 @@ fn draw_demo() {
     let char_dimensions = lfb.get_char_dimensions();
     let text_pos = ((dimensions.0 - MESSAGE.len() as u32 * char_dimensions.0) / 2, bmp_pos.1 - char_dimensions.1 - char_dimensions.1 / 2);
     lfb.draw_str(text_pos.0, text_pos.1, HHU_BLUE, MESSAGE);
+
+    // The lock on `lfb` is automatically released here when `run` finishes.
 }
 
+
+// --- Helper functions remain the same ---
 fn linear_interpolate_1d(x: u32, xr: u32, l: u32, r: u32) -> u32 {
     ((((l >> 16) * (xr - x) + (r >> 16) * x) / xr) << 16) // Red
         | (((((l >> 8) & 0xff) * (xr - x) + ((r >> 8) & 0xff) * x) / xr) << 8) // Green

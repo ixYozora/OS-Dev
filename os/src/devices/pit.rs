@@ -54,6 +54,16 @@ pub fn wait(ms: usize) {
 
 }
 
+/// Returns (hours, minutes, seconds)
+pub fn uptime_hms() -> (usize, usize, usize) {
+    let total_secs = get_system_time() / 1000;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    (hours, minutes, seconds)
+}
+
+
 /* ╔═════════════════════════════════════════════════════════════════════════╗
    ║ Interrupt service routine implementation.                               ║
    ╚═════════════════════════════════════════════════════════════════════════╝ */

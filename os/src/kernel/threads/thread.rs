@@ -18,7 +18,7 @@ use crate::kernel::coroutines::coroutine::Coroutine;
 use crate::kernel::cpu;
 use crate::kernel::threads::scheduler;
 use crate::kernel::threads::scheduler::get_scheduler;
-
+use crate::devices::pit;
 static THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub fn next_id() -> usize {
@@ -208,6 +208,10 @@ impl Thread {
 
         get_scheduler().exit();
     }
+
+}
+pub fn sleep_ms(ms: usize) {
+    pit::wait(ms);
 }
 
 impl Display for Thread {
