@@ -418,7 +418,6 @@ impl YozoraShell {
                 lfb_print!("Launching threads demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_threads_demo);
                 get_scheduler().ready(t);
-                self.draw_prompt();
             }
             "synchronize" =>{
                 lfb_print!("Launching mutex with queue demo in background thread...\n");
