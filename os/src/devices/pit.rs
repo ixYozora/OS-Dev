@@ -88,21 +88,6 @@ impl ISR for TimerISR {
         //add 1 to the global system time
         let current_time = SYSTEM_TIME.fetch_add(self.interval_ms, core::sync::atomic::Ordering::Relaxed);
 
-        //careful with interrupts...
-        // if !get_scheduler().is_locked() && !is_locked() && !cga::CGA.is_queue_locked() {
-        //     //update spinner every 250 ms
-        //     if current_time % 250 == 0 {
-        //         if let Some(mut cga) = CGA.try_lock() {
-        //             let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
-        //             let spinner_char = SPINNER_CHARS[spinner_index];
-        //             //cga.setpos(CGA_COLUMNS - 1, 0);
-        //             //cga.print_byte(spinner_char as u8);
-        //             cga.show(CGA_COLUMNS - 1, 0, spinner_char, 4);
-        //         }
-        //     }
-        // }
-
-        // //now for lfb
         if current_time % 250 == 0 {
             //update spinner every 1000 ms
             if !get_scheduler().is_locked() && !is_locked() && is_lfb_initialized() {
@@ -119,8 +104,6 @@ impl ISR for TimerISR {
             }
         }
 
-
-        //thread wechsel wegen deadlocks
         unsafe {
             INT_VECTORS.force_unlock();
         }

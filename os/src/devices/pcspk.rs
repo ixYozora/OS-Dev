@@ -12,7 +12,7 @@
 use spin::Mutex;
 use crate::kernel::cpu;
 use crate::kernel::cpu::IoPort;
-
+use crate::pit;
 pub static SPEAKER: Mutex<Speaker> = Mutex::new(Speaker::new());
 
 // Ports
@@ -85,7 +85,6 @@ impl Speaker {
     pub fn play(&mut self, frequency: usize, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
-        kprintln!("Frequency: {} Hz, Duration: {} ms", frequency, duration);
         unsafe {
             self.off();
 
@@ -104,18 +103,11 @@ impl Speaker {
             self.pit_data2_port.outb((divisor & 0xFF) as u8);
             self.pit_data2_port.outb((divisor >> 8) as u8);
 
-            let mut ppi = self.ppi_port.inb();
-            ppi |= 0x03;
-            self.ppi_port.outb(ppi);
-
+            self.on();
             self.delay(duration);
-
             self.off();
 
         }
-
-        kprintln!("Done");
-
     }
 
     /// Turn on the speaker.
@@ -153,17 +145,14 @@ impl Speaker {
         }
     }
 
-    /// Wait for a given amount of time in milliseconds using counter 0 of the PIT.
-    /// Mode 2 (rate generator) with a reload value of 1193 (0x04a9) is used.
-    /// This means that the counter will count down from 1193 to 0 and then reload itself.
-    /// Counting from 1193 to 0 takes 1ms.
+
     fn delay(&mut self, duration: usize) {
 
         /* Hier muss Code eingefuegt werden */
-        let counter: u16 = 500;
+        let counter: u16 = 700;
 
         unsafe {
-            self.pit_ctrl_port.outb(0x34); //0x34 da 00 channel 0, 11 acces mode, 010 mode 2, 0 16 binary
+            self.pit_ctrl_port.outb(0x34);
             self.pit_data0_port.outb((counter & 0xFF) as u8);
             self.pit_data0_port.outb(((counter >> 8) & 0xFF) as u8);
         }
@@ -189,7 +178,7 @@ impl Speaker {
 /// Kévin Rapaille, August 2013, https://gist.github.com/XeeX/6220067
 pub fn tetris() {
     let mut speaker = SPEAKER.lock();
-    
+
     speaker.play(658, 125);
     speaker.play(1320, 500);
     speaker.play(990, 250);
@@ -312,7 +301,7 @@ pub fn tetris() {
 /// https://www.kirrus.co.uk/2010/09/linux-beep-music
 pub fn aerodynamic() {
     let mut speaker = SPEAKER.lock();
-    
+
     speaker.play(587, 122);
     speaker.play(370, 122);
     speaker.play(493, 122);

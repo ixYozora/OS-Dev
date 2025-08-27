@@ -29,8 +29,4 @@ pub fn run() {
     drop(box2);
     lfb_print!("End: ");
     allocator::dump_free_list_lfb();
-
-    lfb_set_color(HHU_GREEN);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
 }

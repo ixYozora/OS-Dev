@@ -1,4 +1,4 @@
-use crate::devices::lfb::{BLACK, GREEN, get_lfb, is_lfb_initialized};
+use crate::devices::lfb::{BLACK, GREEN,BLUE,RED, CYAN, get_lfb, is_lfb_initialized};
 use crate::library::mutex::Mutex;
 use core::fmt;
 use core::fmt::Write;
@@ -21,7 +21,7 @@ impl Writer {
         Writer {
             cursor_x: 0,
             cursor_y: 0,
-            color: GREEN,
+            color: RED,
         }
     }
 

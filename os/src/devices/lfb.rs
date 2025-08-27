@@ -134,6 +134,26 @@ impl LFB {
         }
     }
 
+    /// Clear a whole *text* line (one 8x8 font row) at pixel y across the full width.
+    pub fn clear_text_line(&mut self, y: u32) {
+        let h = font_8x8::CHAR_HEIGHT;
+        if y < self.height {
+            let draw_h = core::cmp::min(h, self.height - y);
+            self.fill_rect(0, y, self.width, draw_h, BLACK);
+        }
+    }
+
+    /// Clear a *text* line segment from pixel x to the right edge at pixel y.
+    pub fn clear_text_line_from(&mut self, x: u32, y: u32) {
+        let h = font_8x8::CHAR_HEIGHT;
+        if x < self.width && y < self.height {
+            let draw_w = self.width - x;
+            let draw_h = core::cmp::min(h, self.height - y);
+            self.fill_rect(x, y, draw_w, draw_h, BLACK);
+        }
+    }
+
+
     /// Draw a pixel at the specified (x, y) coordinates with the given color.
     /// This method checks the bounds of the framebuffer before drawing
     /// and omits drawing if the coordinates are out of bounds.

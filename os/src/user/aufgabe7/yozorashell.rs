@@ -1,12 +1,10 @@
-//! A compact, original shell implementation: "Yozora Shell".
-
 use crate::devices::{keyboard, lfb};
 use crate::kernel::threads::scheduler::get_scheduler;
 use crate::user::aufgabe2::sound_demo;
 use crate::user::aufgabe7::graphic_demo;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::devices::lfb::{color, get_lfb, HHU_GREEN};
+use crate::devices::lfb::{color, get_lfb, HHU_GREEN, HHU_BLUE};
 use crate::kernel::threads::thread::Thread;
 use crate::cga_print;
 use alloc::collections::VecDeque;
@@ -51,42 +49,42 @@ pub struct YozoraShell {
 
 fn run_text_demo() {
     crate::user::aufgabe1::text_demo::run();
-    lfb_set_color(HHU_GREEN);
+    lfb_set_color(HHU_BLUE);
     lfb_print!("yozora$ ");
     lfb_set_color(WHITE);
 }
 
 fn run_keyboard_demo() {
     crate::user::aufgabe1::keyboard_demo::run();
-    lfb_set_color(HHU_GREEN);
+    lfb_set_color(HHU_BLUE);
     lfb_print!("yozora$ ");
     lfb_set_color(WHITE);
 }
 
 fn run_sound_demo() {
     crate::user::aufgabe2::sound_demo::run();
-    lfb_set_color(HHU_GREEN);
+    lfb_set_color(HHU_BLUE);
     lfb_print!("yozora$ ");
     lfb_set_color(WHITE);
 }
 
 fn run_heap_demo() {
     crate::user::aufgabe2::heap_demo::run();
-    lfb_set_color(HHU_GREEN);
+    lfb_set_color(HHU_BLUE);
     lfb_print!("yozora$ ");
     lfb_set_color(WHITE);
 }
 
 fn run_graphics_demo() {
-    // This function now correctly calls the simplified demo run function.
     graphic_demo::run();
 }
 
 fn run_threads_demo() {
     crate::user::aufgabe4::thread_demo::run();
-    lfb_set_color(HHU_GREEN);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
+}
+
+fn run_synchronize_demo() {
+    crate::user::aufgabe7::synchronize_demo::run();
 }
 
 impl YozoraShell {
@@ -125,7 +123,7 @@ impl YozoraShell {
     }
 
     fn draw_prompt(&self) {
-        lfb_set_color(HHU_GREEN);
+        lfb_set_color(HHU_BLUE);
         lfb_print!("{}", PROMPT);
         lfb_set_color(lfb::WHITE);
     }
@@ -266,8 +264,7 @@ impl YozoraShell {
             "demo" => self.cmd_demo(&args),
             "exit" | "quit" => {
                 lfb_print!("Goodbye.\n");
-                // NOTE: exiting behavior depends on your kernel — we simply break here.
-                // In many kernels you might want to return to a higher-level menu or halt.
+
                 loop {
                     // keep the shell alive; adjust as you prefer
                     thread::sleep_ms(1000);
@@ -347,7 +344,7 @@ impl YozoraShell {
     fn cmd_sound(&self, args: &[&str]) {
         // Run sound tunes in background threads so shell remains responsive
         if args.is_empty() {
-            lfb_print!("Sounds: tetris, mario, pacman, starwars, aerodynamic\n");
+            lfb_print!("Sounds: tetris, aerodynamic\n");
             return;
         }
         match args[0] {
@@ -386,7 +383,8 @@ impl YozoraShell {
 
     fn cmd_demo(&self, args: &[&str]) {
         if args.is_empty() {
-            lfb_print!("Demos: text, keyboard, heap, sound, graphics, threads\n");
+            lfb_print!("Demos: text, keyboard, heap, sound, graphics, threads, synchronize\n");
+            self.draw_prompt();
             return;
         }
 
@@ -418,6 +416,12 @@ impl YozoraShell {
             "threads" => {
                 lfb_print!("Launching threads demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_threads_demo);
+                get_scheduler().ready(t);
+                self.draw_prompt();
+            }
+            "synchronize" =>{
+                lfb_print!("Launching mutex with queue demo in background thread...\n");
+                let t = crate::kernel::threads::thread::Thread::new(run_synchronize_demo);
                 get_scheduler().ready(t);
             }
             other => {
