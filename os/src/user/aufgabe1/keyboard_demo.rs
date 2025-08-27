@@ -5,7 +5,7 @@ use crate::devices::keyboard as keyboard; // shortcut for keyboard
 use crate::library::input;
 use crate::devices::lfb::{color, get_lfb, HHU_GREEN, WHITE};
 use crate::lfb_print;
-use crate::devices::lfb_print::{lfb_print, lfb_clear, lfb_set_color};
+use crate::devices::buff_print::{lfb_print, lfb_clear, lfb_set_color};
 
 /// Clear any remaining keys from the keyboard buffer
 fn clear_keyboard_buffer() {

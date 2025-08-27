@@ -1,4 +1,4 @@
-use crate::devices::lfb_print::{lfb_print, lfb_set_color, lfb_clear, lfb_get_cursor_pos, lfb_set_cursor_pos};
+use crate::devices::buff_print::{lfb_print, lfb_set_color, lfb_clear, lfb_get_cursor_pos, lfb_set_cursor_pos};
 use crate::devices::lfb::{HHU_GREEN, WHITE, BLUE, YELLOW, RED, HHU_BLUE};
 use crate::kernel::threads::scheduler::{get_scheduler, Scheduler};
 use crate::kernel::threads::thread::Thread;

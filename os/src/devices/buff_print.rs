@@ -127,14 +127,8 @@ impl core::fmt::Write for Writer {
 #[macro_export]
 macro_rules! lfb_print {
     ($($arg:tt)*) => ({
-        $crate::devices::lfb_print::lfb_print(format_args!($($arg)*));
+        $crate::devices::buff_print::lfb_print(format_args!($($arg)*));
     });
-}
-#[macro_export]
-macro_rules! lfb_println {
-    () => (lfb_print!("\n"));
-    ($fmt:expr) => (lfb_print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => (lfb_print!(concat!($fmt, "\n"), $($arg)*));
 }
 
 /// Helper function of print macros (must be public)

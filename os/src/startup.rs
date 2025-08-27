@@ -61,6 +61,7 @@ use crate::kernel::threads::thread::Thread;
 #[unsafe(no_mangle)]
 pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
     allocator::init();
+    kprintln!("Initializing allocator");
 
     kprintln!("Initializing PIC");
     pic::PIC.lock().init();

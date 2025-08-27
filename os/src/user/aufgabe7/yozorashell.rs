@@ -9,8 +9,7 @@ use crate::kernel::threads::thread::Thread;
 use crate::cga_print;
 use alloc::collections::VecDeque;
 use crate::kernel::threads::thread;
-use crate::lfb_print;
-use crate::{lfb_println, devices::lfb_print::{lfb_print, lfb_clear, lfb_set_color}};
+use crate::{lfb_print, devices::buff_print::{lfb_print, lfb_clear, lfb_set_color}};
 use crate::devices::lfb::WHITE;
 
 
@@ -259,7 +258,7 @@ impl YozoraShell {
             "threads" => self.cmd_threads(),
             "uptime" => self.cmd_uptime(),
             "history" => self.cmd_history(),
-            "gfx" | "graphics" => self.cmd_graphics(),
+            "graphics" => self.cmd_graphics(),
             "sound" => self.cmd_sound(&args),
             "demo" => self.cmd_demo(&args),
             "exit" | "quit" => {
@@ -287,7 +286,7 @@ impl YozoraShell {
         lfb_print!("  echo <text>    repeat text\n");
         lfb_print!("  threads        quick thread info\n");
         lfb_print!("  uptime         how long the system runs\n");
-        lfb_print!("  gfx|graphics   launch the graphical demo (if available)\n");
+        lfb_print!("  graphics       launch the graphical demo (if available)\n");
         lfb_print!("  sound [name]   play built-in tunes\n");
         lfb_print!("  demo <name>    run small demo programs\n");
         lfb_print!("  history        list previous commands\n");
@@ -352,11 +351,13 @@ impl YozoraShell {
                 lfb_print!("Queuing Tetris theme...\n");
                 let t = thread::Thread::new(crate::devices::pcspk::tetris);
                 get_scheduler().ready(t);
+                self.draw_prompt();
             }
             "aerodynamic" => {
                 lfb_print!("Queuing Aerodynamic...\n");
                 let t = thread::Thread::new(crate::devices::pcspk::aerodynamic);
                 get_scheduler().ready(t);
+                self.draw_prompt();
             }
             other => {
                 lfb_print!("Unknown tune: {}. Try without args to get list.\n", other);

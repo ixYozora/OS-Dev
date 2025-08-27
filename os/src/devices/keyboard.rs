@@ -401,7 +401,6 @@ impl Keyboard {
             return invalid;
         }
 
-        //invalid
     }
 
     /// Set the repeat rate of the keyboard (determined by the speed and delay).
@@ -434,8 +433,6 @@ impl Keyboard {
          *****************************************************************************/
 
 
-
-        //Warten bis der Eingabepuffer leer ist → Bit-1 INPB im Status-Register prüfen
         let mut status: u8 = 1;
 
         while (status & KBD_INPB) != 0 {
@@ -516,10 +513,6 @@ impl Keyboard {
 
 
     fn key_hit_irq(&mut self) -> Option<Key> {
-
-
-        // Poll the keyboard controller until a key is pressed.
-        // Decode and return the key if it is complete.
         let mut status = 0;
         while (status & KBD_OUTB) == 0 || (status & KBD_AUXB) != 0 {
             unsafe {
