@@ -1,4 +1,4 @@
-use crate::devices::buff_print::{lfb_print, lfb_set_color, lfb_get_cursor_pos, lfb_set_cursor_pos};
+use crate::devices::buff_print::{buff_set_color, buff_get_cursor_pos, buff_set_cursor_pos};
 use crate::devices::lfb::{HHU_GREEN, WHITE, BLUE, YELLOW, RED, HHU_BLUE};
 use crate::kernel::threads::scheduler::get_scheduler;
 use crate::kernel::threads::thread::Thread;
@@ -6,7 +6,7 @@ use crate::library::mutex::Mutex;
 // Uncomment the line below to test with Spinlock instead
 //use crate::library::spinlock::Spinlock as Mutex;
 use alloc::vec::Vec;
-use crate::lfb_print;
+use crate::buff_print;
 // Shared data without turn-based logic
 struct SharedData {
     counters: [u32; 3],
@@ -58,12 +58,12 @@ fn competitive_thread_entry() {
 
             // One-time setup
             if !data.demo_initialized && thread_index == 0 {
-                let (x, y) = lfb_get_cursor_pos();
+                let (x, y) = buff_get_cursor_pos();
                 data.counter_start_x = x;
                 data.counter_start_y = y;
-                lfb_set_color(WHITE);
-                lfb_print!("=== Lock Competition Demo ===\n");
-                lfb_print!("All threads compete for the same lock\n\n");
+                buff_set_color(WHITE);
+                buff_print!("=== Lock Competition Demo ===\n");
+                buff_print!("All threads compete for the same lock\n\n");
                 data.demo_initialized = true;
             }
 
@@ -89,45 +89,45 @@ fn competitive_thread_entry() {
                     lfb.clear_text_line(data.counter_start_y + 32);
                 }
 
-                lfb_set_cursor_pos(data.counter_start_x, data.counter_start_y);
+                buff_set_cursor_pos(data.counter_start_x, data.counter_start_y);
 
                 // Display counters
                 for i in 0..3 {
                     if i == thread_index {
-                        lfb_set_color(RED); // Highlight currently running thread
-                        lfb_print!(">>> ");
+                        buff_set_color(RED); // Highlight currently running thread
+                        buff_print!(">>> ");
                     } else {
-                        lfb_set_color(WHITE);
-                        lfb_print!("    ");
+                        buff_set_color(WHITE);
+                        buff_print!("    ");
                     }
 
                     match i {
-                        0 => lfb_set_color(YELLOW),
-                        1 => lfb_set_color(BLUE),
-                        2 => lfb_set_color(HHU_GREEN),
+                        0 => buff_set_color(YELLOW),
+                        1 => buff_set_color(BLUE),
+                        2 => buff_set_color(HHU_GREEN),
                         _ => {}
                     }
-                    lfb_print!("[{}] ", i);
+                    buff_print!("[{}] ", i);
 
-                    lfb_set_color(WHITE);
-                    lfb_print!("{:05}   ", data.counters[i]);
+                    buff_set_color(WHITE);
+                    buff_print!("{:05}   ", data.counters[i]);
                 }
 
                 // Show current running thread
-                lfb_set_cursor_pos(0, data.counter_start_y + 16);
-                lfb_set_color(HHU_BLUE);
-                lfb_print!("Currently running: Thread {}", thread_index);
+                buff_set_cursor_pos(0, data.counter_start_y + 16);
+                buff_set_color(HHU_BLUE);
+                buff_print!("Currently running: Thread {}", thread_index);
 
                 // Show recent thread execution pattern
-                lfb_set_cursor_pos(0, data.counter_start_y + 32);
-                lfb_set_color(YELLOW);
-                lfb_print!("Recent pattern: ");
+                buff_set_cursor_pos(0, data.counter_start_y + 32);
+                buff_set_color(YELLOW);
+                buff_print!("Recent pattern: ");
                 if data.thread_switches.len() >= 10 {
                     let start = data.thread_switches.len() - 10;
                     for i in start..data.thread_switches.len() {
-                        lfb_print!("{}", data.thread_switches[i]);
+                        buff_print!("{}", data.thread_switches[i]);
                         if i < data.thread_switches.len() - 1 {
-                            lfb_print!("->");
+                            buff_print!("->");
                         }
                     }
                 }
@@ -138,10 +138,10 @@ fn competitive_thread_entry() {
             if total_work >= 15000 {
                 data.active = false;
 
-                lfb_set_cursor_pos(0, data.counter_start_y + 48);
-                lfb_set_color(RED);
-                lfb_print!("=== Demo Complete ===\n");
-                lfb_set_color(WHITE);
+                buff_set_cursor_pos(0, data.counter_start_y + 48);
+                buff_set_color(RED);
+                buff_print!("=== Demo Complete ===\n");
+                buff_set_color(WHITE);
 
                 // Analyze the pattern
                 let mut consecutive_count = 1;
@@ -155,9 +155,9 @@ fn competitive_thread_entry() {
                     }
                 }
 
-                lfb_set_color(HHU_BLUE);
-                lfb_print!("yozora$ ");
-                lfb_set_color(WHITE);
+                buff_set_color(HHU_BLUE);
+                buff_print!("yozora$ ");
+                buff_set_color(WHITE);
                 break;
             }
         } // Lock released here
@@ -171,8 +171,8 @@ fn competitive_thread_entry() {
 }
 
 pub fn run() {
-    lfb_set_color(WHITE);
-    lfb_print!("Starting Lock Competition Demo\n");
+    buff_set_color(WHITE);
+    buff_print!("Starting Lock Competition Demo\n");
 
     let scheduler = get_scheduler();
 

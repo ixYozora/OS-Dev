@@ -3,7 +3,7 @@ use crate::library::mutex::Mutex;
 use core::fmt;
 use core::fmt::Write;
 use crate::devices::lfb::LFB;
-use crate::lfb_print;
+use crate::buff_print;
 
 /// The global writer that can used as an interface from other modules.
 /// It is threadsafe by using 'Mutex'.
@@ -125,35 +125,35 @@ impl core::fmt::Write for Writer {
 }
 
 #[macro_export]
-macro_rules! lfb_print {
+macro_rules! buff_print {
     ($($arg:tt)*) => ({
-        $crate::devices::buff_print::lfb_print(format_args!($($arg)*));
+        $crate::devices::buff_print::buff_print(format_args!($($arg)*));
     });
 }
 
 /// Helper function of print macros (must be public)
-pub fn lfb_print(args: fmt::Arguments) {
+pub fn buff_print(args: fmt::Arguments) {
     if is_lfb_initialized() {
         WRITER.lock().write_fmt(args).unwrap();
     }
 }
 
 /// Clear the LFB screen
-pub fn lfb_clear() {
+pub fn buff_clear() {
     if is_lfb_initialized() {
         WRITER.lock().clear();
     }
 }
 
 /// Set the text color for LFB output
-pub fn lfb_set_color(color: u32) {
+pub fn buff_set_color(color: u32) {
     if is_lfb_initialized() {
         WRITER.lock().set_color(color);
     }
 }
 
 /// Get current cursor position
-pub fn lfb_get_cursor_pos() -> (u32, u32) {
+pub fn buff_get_cursor_pos() -> (u32, u32) {
     if is_lfb_initialized() {
         WRITER.lock().get_cursor_pos()
     } else {
@@ -162,13 +162,13 @@ pub fn lfb_get_cursor_pos() -> (u32, u32) {
 }
 
 /// Set cursor position
-pub fn lfb_set_cursor_pos(x: u32, y: u32) {
+pub fn buff_set_cursor_pos(x: u32, y: u32) {
     if is_lfb_initialized() {
         WRITER.lock().set_cursor_pos(x, y);
     }
 }
 
-pub fn lfb_call_backspace(x: u32, y: u32, count: usize) {
+pub fn buff_call_backspace(x: u32, y: u32, count: usize) {
     if is_lfb_initialized() {
         let mut writer = WRITER.lock();
         writer.set_cursor_pos(x, y);

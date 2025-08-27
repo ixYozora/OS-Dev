@@ -16,4 +16,5 @@ pub mod font_8x8;
 pub mod lfb;
 pub mod pci;
 
+#[macro_use]
 pub mod buff_print;

@@ -11,7 +11,7 @@ use super::{align_up, Locked};
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::{mem, ptr};
 use crate::kernel::allocator::bump::BumpAllocator;
-use crate::lfb_print;
+use crate::buff_print;
 use crate::kernel::cpu as cpu;
 
 /// Header of a free block in the list allocator.
@@ -145,16 +145,16 @@ impl LinkedListAllocator {
     /// Dump the free list for debugging purposes.
     pub fn dump_free_list(&mut self) {
 
-        lfb_print!("Dumping free memory list (including dummy element)\n");
-        lfb_print!("  Heap start:  {:#x}, heap end:  {:#x}\n", self.heap_start, self.heap_end);
+        buff_print!("Dumping free memory list (including dummy element)\n");
+        buff_print!("  Heap start:  {:#x}, heap end:  {:#x}\n", self.heap_start, self.heap_end);
 
         let mut current = &mut self.head;
         while let Some(ref block) = current.next {
-            lfb_print!("  Block start: {:#x}, block end: {:#x}. block size: {}\n",
+            buff_print!("  Block start: {:#x}, block end: {:#x}. block size: {}\n",
                   block.start_addr(), block.end_addr(), block.size);
             current = current.next.as_mut().unwrap();
         }
-        lfb_print!(" \n");
+        buff_print!(" \n");
     }
 
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {

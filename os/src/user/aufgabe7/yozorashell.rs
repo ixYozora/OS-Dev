@@ -9,7 +9,7 @@ use crate::kernel::threads::thread::Thread;
 use crate::cga_print;
 use alloc::collections::VecDeque;
 use crate::kernel::threads::thread;
-use crate::{lfb_print, devices::buff_print::{lfb_print, lfb_clear, lfb_set_color}};
+use crate::{buff_print, devices::buff_print::{buff_print, buff_clear, buff_set_color}};
 use crate::devices::lfb::WHITE;
 
 
@@ -48,30 +48,30 @@ pub struct YozoraShell {
 
 fn run_text_demo() {
     crate::user::aufgabe1::text_demo::run();
-    lfb_set_color(HHU_BLUE);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
+    buff_set_color(HHU_BLUE);
+    buff_print!("yozora$ ");
+    buff_set_color(WHITE);
 }
 
 fn run_keyboard_demo() {
     crate::user::aufgabe1::keyboard_demo::run();
-    lfb_set_color(HHU_BLUE);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
+    buff_set_color(HHU_BLUE);
+    buff_print!("yozora$ ");
+    buff_set_color(WHITE);
 }
 
 fn run_sound_demo() {
     crate::user::aufgabe2::sound_demo::run();
-    lfb_set_color(HHU_BLUE);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
+    buff_set_color(HHU_BLUE);
+    buff_print!("yozora$ ");
+    buff_set_color(WHITE);
 }
 
 fn run_heap_demo() {
     crate::user::aufgabe2::heap_demo::run();
-    lfb_set_color(HHU_BLUE);
-    lfb_print!("yozora$ ");
-    lfb_set_color(WHITE);
+    buff_set_color(HHU_BLUE);
+    buff_print!("yozora$ ");
+    buff_set_color(WHITE);
 }
 
 fn run_graphics_demo() {
@@ -117,20 +117,20 @@ impl YozoraShell {
     }
 
     fn show_banner(&self) {
-        lfb_print!("\n{}\n", SHELL_BANNER);
-        lfb_print!("Type `help` to see commands.\n\n");
+        buff_print!("\n{}\n", SHELL_BANNER);
+        buff_print!("Type `help` to see commands.\n\n");
     }
 
     fn draw_prompt(&self) {
-        lfb_set_color(HHU_BLUE);
-        lfb_print!("{}", PROMPT);
-        lfb_set_color(lfb::WHITE);
+        buff_set_color(HHU_BLUE);
+        buff_print!("{}", PROMPT);
+        buff_set_color(lfb::WHITE);
     }
 
     fn process_key(&mut self, key: crate::devices::key::Key) {
         match key.get_scancode() {
             28 => { // Enter
-                lfb_print!("\n");
+                buff_print!("\n");
                 let input_line = self.collect_line();
                 self.handle_line(&input_line);
                 self.buf.clear();
@@ -145,7 +145,7 @@ impl YozoraShell {
             14 => { // Backspace
                 if let Some(_) = self.buf.pop() {
                     // send backspace to LFB printing helper
-                    lfb_print!("\x08");
+                    buff_print!("\x08");
                 }
             }
             72 => { // Up
@@ -160,7 +160,7 @@ impl YozoraShell {
                     let ch = ascii as u8 as char;
                     if (ch.is_ascii_graphic() || ch == ' ') && self.buf.len() < INPUT_CAP {
                         self.buf.push(ch);
-                        lfb_print!("{}", ch);
+                        buff_print!("{}", ch);
                     }
                 }
             }
@@ -221,14 +221,14 @@ impl YozoraShell {
         self.clear_current_input_on_screen();
         self.buf = entry.chars().collect();
         self.draw_prompt();
-        lfb_print!("{}", self.buf.iter().collect::<String>());
+        buff_print!("{}", self.buf.iter().collect::<String>());
     }
 
     fn clear_current_input_on_screen(&self) {
         // print backspaces for prompt + current input length
         let cur_len = self.buf.len();
         for _ in 0..(PROMPT.len() + cur_len) {
-            lfb_print!("\x08");
+            buff_print!("\x08");
         }
     }
 
@@ -262,7 +262,7 @@ impl YozoraShell {
             "sound" => self.cmd_sound(&args),
             "demo" => self.cmd_demo(&args),
             "exit" | "quit" => {
-                lfb_print!("Goodbye.\n");
+                buff_print!("Goodbye.\n");
 
                 loop {
                     // keep the shell alive; adjust as you prefer
@@ -271,7 +271,7 @@ impl YozoraShell {
             }
             "" => {}
             other => {
-                lfb_print!("Unknown command: '{}'\n", other);
+                buff_print!("Unknown command: '{}'\n", other);
             }
         }
     }
@@ -279,42 +279,42 @@ impl YozoraShell {
     /* -------- command implementations (different text to your original) -------- */
 
     fn cmd_help(&self) {
-        lfb_print!("Commands (Yozora):\n");
-        lfb_print!("  help           show this list\n");
-        lfb_print!("  clear          wipe the framebuffer text\n");
-        lfb_print!("  version|ver    show shell & build info\n");
-        lfb_print!("  echo <text>    repeat text\n");
-        lfb_print!("  threads        quick thread info\n");
-        lfb_print!("  uptime         how long the system runs\n");
-        lfb_print!("  graphics       launch the graphical demo (if available)\n");
-        lfb_print!("  sound [name]   play built-in tunes\n");
-        lfb_print!("  demo <name>    run small demo programs\n");
-        lfb_print!("  history        list previous commands\n");
-        lfb_print!("  exit|quit      leave the shell\n");
+        buff_print!("Commands (Yozora):\n");
+        buff_print!("  help           show this list\n");
+        buff_print!("  clear          wipe the framebuffer text\n");
+        buff_print!("  version|ver    show shell & build info\n");
+        buff_print!("  echo <text>    repeat text\n");
+        buff_print!("  threads        quick thread info\n");
+        buff_print!("  uptime         how long the system runs\n");
+        buff_print!("  graphics       launch the graphical demo (if available)\n");
+        buff_print!("  sound [name]   play built-in tunes\n");
+        buff_print!("  demo <name>    run small demo programs\n");
+        buff_print!("  history        list previous commands\n");
+        buff_print!("  exit|quit      leave the shell\n");
     }
 
     fn cmd_clear(&self) {
         if lfb::is_lfb_initialized() {
-            lfb_clear();
+            buff_clear();
         }
     }
 
     fn cmd_version(&self) {
-        lfb_print!("{}\n", SHELL_VERSION);
-        lfb_print!("Built for x86_64, written for Yozora.\n");
+        buff_print!("{}\n", SHELL_VERSION);
+        buff_print!("Built for x86_64, written for Yozora.\n");
     }
 
     fn cmd_echo(&self, args: &[&str]) {
         if args.is_empty() {
-            lfb_print!("\n");
+            buff_print!("\n");
         } else {
-            lfb_print!("{}\n", args.join(" "));
+            buff_print!("{}\n", args.join(" "));
         }
     }
 
     fn cmd_threads(&self) {
         let sched = get_scheduler();
-        lfb_print!("Active TID: {}\n", sched.get_active_tid());
+        buff_print!("Active TID: {}\n", sched.get_active_tid());
     }
 
     fn cmd_uptime(&self) {
@@ -324,17 +324,17 @@ impl YozoraShell {
         let h = s / 3600;
         let m = (s % 3600) / 60;
         let sec = s % 60;
-        lfb_print!("Uptime: {:02}:{:02}:{:02} ({} ms)\n", h, m, sec, ms);
+        buff_print!("Uptime: {:02}:{:02}:{:02} ({} ms)\n", h, m, sec, ms);
     }
 
     fn cmd_history(&self) {
         if self.history.is_empty() {
-            lfb_print!("No entries in history.\n");
+            buff_print!("No entries in history.\n");
             return;
         }
-        lfb_print!("History (most recent last):\n");
+        buff_print!("History (most recent last):\n");
         for (i, e) in self.history.iter().enumerate() {
-            lfb_print!("  {}: {}\n", i + 1, e);
+            buff_print!("  {}: {}\n", i + 1, e);
         }
     }
 
@@ -343,89 +343,81 @@ impl YozoraShell {
     fn cmd_sound(&self, args: &[&str]) {
         // Run sound tunes in background threads so shell remains responsive
         if args.is_empty() {
-            lfb_print!("Sounds: tetris, aerodynamic\n");
+            buff_print!("Sounds: tetris, aerodynamic\n");
             return;
         }
         match args[0] {
             "tetris" => {
-                lfb_print!("Queuing Tetris theme...\n");
+                buff_print!("Queuing Tetris theme...\n");
                 let t = thread::Thread::new(crate::devices::pcspk::tetris);
                 get_scheduler().ready(t);
                 self.draw_prompt();
             }
             "aerodynamic" => {
-                lfb_print!("Queuing Aerodynamic...\n");
+                buff_print!("Queuing Aerodynamic...\n");
                 let t = thread::Thread::new(crate::devices::pcspk::aerodynamic);
                 get_scheduler().ready(t);
                 self.draw_prompt();
             }
             other => {
-                lfb_print!("Unknown tune: {}. Try without args to get list.\n", other);
+                buff_print!("Unknown tune: {}. Try without args to get list.\n", other);
             }
         }
     }
 
     fn cmd_graphics(&self) {
         if !lfb::is_lfb_initialized() {
-            lfb_print!("No framebuffer — graphics unavailable.\n");
+            buff_print!("No framebuffer — graphics unavailable.\n");
             return;
         }
-        lfb_print!("Launching graphics demo in background thread...\n");
-
-        // BEFORE: Synchronous call that caused the error
-        // run_graphics_demo();
-
-        // AFTER: Create a new thread for the graphics demo, just like other demos.
         let t = Thread::new(run_graphics_demo);
         get_scheduler().ready(t);
     }
 
-
-
     fn cmd_demo(&self, args: &[&str]) {
         if args.is_empty() {
-            lfb_print!("Demos: text, keyboard, heap, sound, graphics, threads, synchronize\n");
+            buff_print!("Demos: text, keyboard, heap, sound, graphics, threads, synchronize\n");
             self.draw_prompt();
             return;
         }
 
         match args[0] {
             "text" => {
-                lfb_print!("Launching text demo in background thread...\n");
+                buff_print!("Launching text demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_text_demo);
                 get_scheduler().ready(t);
             }
             "keyboard" => {
-                lfb_print!("Launching keyboard demo synchronously (blocking)...\n");
+                buff_print!("Launching keyboard demo synchronously (blocking)...\n");
                 run_keyboard_demo();
             }
             "heap" => {
-                lfb_print!("Launching heap in background thread...\n");
+                buff_print!("Launching heap in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_heap_demo);
                 get_scheduler().ready(t);
             }
             "sound" => {
-                lfb_print!("Launching sound demo in background thread...\n");
+                buff_print!("Launching sound demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_sound_demo);
                 get_scheduler().ready(t);
             }
             "graphics" => {
                 // This message is now correct. It calls cmd_graphics, which creates a thread.
-                lfb_print!("Launching graphics demo in background thread...\n");
+                buff_print!("Launching graphics demo in background thread...\n");
                 self.cmd_graphics();
             }
             "threads" => {
-                lfb_print!("Launching threads demo in background thread...\n");
+                buff_print!("Launching threads demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_threads_demo);
                 get_scheduler().ready(t);
             }
             "synchronize" =>{
-                lfb_print!("Launching mutex with queue demo in background thread...\n");
+                buff_print!("Launching mutex with queue demo in background thread...\n");
                 let t = crate::kernel::threads::thread::Thread::new(run_synchronize_demo);
                 get_scheduler().ready(t);
             }
             other => {
-                lfb_print!("Unknown demo: {}\n", other);
+                buff_print!("Unknown demo: {}\n", other);
             }
         }
     }

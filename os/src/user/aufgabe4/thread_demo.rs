@@ -1,9 +1,9 @@
-use crate::devices::buff_print::{lfb_print, lfb_set_color, lfb_clear, lfb_get_cursor_pos, lfb_set_cursor_pos};
+use crate::devices::buff_print::{buff_print, buff_set_color, buff_clear, buff_get_cursor_pos, buff_set_cursor_pos};
 use crate::devices::lfb::{HHU_GREEN, WHITE, BLUE, YELLOW, RED, HHU_BLUE};
 use crate::kernel::threads::scheduler::{get_scheduler, Scheduler};
 use crate::kernel::threads::thread::Thread;
 use crate::user::aufgabe4::hello_world_thread;
-use crate::lfb_print;
+use crate::buff_print;
 
 // Global state without additional synchronization
 static mut THREAD_COUNTERS: [u32; 3] = [0, 0, 0];
@@ -44,10 +44,10 @@ fn thread_entry() {
                 if thread_index == 0 && THREAD_COUNTERS[thread_index] % 100 == 0 {
                     // One-time setup
                     if THREAD_COUNTERS[thread_index] == 100 {
-                        lfb_set_color(WHITE);
-                        lfb_print!("=== Thread Demo - Test: Three Counters ===\n\n");
+                        buff_set_color(WHITE);
+                        buff_print!("=== Thread Demo - Test: Three Counters ===\n\n");
 
-                        let (x, y) = lfb_get_cursor_pos();
+                        let (x, y) = buff_get_cursor_pos();
                         COUNTER_START_X = x;
                         COUNTER_START_Y = y;
                     }
@@ -57,23 +57,23 @@ fn thread_entry() {
                         let mut lfb = crate::devices::lfb::get_lfb().lock();
                         lfb.clear_text_line_from(COUNTER_START_X, COUNTER_START_Y);
                     }
-                    lfb_set_cursor_pos(COUNTER_START_X, COUNTER_START_Y);
+                    buff_set_cursor_pos(COUNTER_START_X, COUNTER_START_Y);
 
                     // Draw counters
-                    lfb_set_color(YELLOW);
-                    lfb_print!("[0] ");
-                    lfb_set_color(HHU_GREEN);
-                    lfb_print!("{:05}   ", THREAD_COUNTERS[0]);
+                    buff_set_color(YELLOW);
+                    buff_print!("[0] ");
+                    buff_set_color(HHU_GREEN);
+                    buff_print!("{:05}   ", THREAD_COUNTERS[0]);
 
-                    lfb_set_color(BLUE);
-                    lfb_print!("[1] ");
-                    lfb_set_color(HHU_GREEN);
-                    lfb_print!("{:05}   ", THREAD_COUNTERS[1]);
+                    buff_set_color(BLUE);
+                    buff_print!("[1] ");
+                    buff_set_color(HHU_GREEN);
+                    buff_print!("{:05}   ", THREAD_COUNTERS[1]);
 
-                    lfb_set_color(RED);
-                    lfb_print!("[2] ");
-                    lfb_set_color(HHU_GREEN);
-                    lfb_print!("{:05}", THREAD_COUNTERS[2]);
+                    buff_set_color(RED);
+                    buff_print!("[2] ");
+                    buff_set_color(HHU_GREEN);
+                    buff_print!("{:05}", THREAD_COUNTERS[2]);
                 }
 
                 // Control thread logic
@@ -82,21 +82,21 @@ fn thread_entry() {
                         THREAD_ACTIVE[1] = false;
                         THREAD_ACTIVE[2] = false;
 
-                        lfb_set_cursor_pos(0, COUNTER_START_Y + 16);
-                        lfb_set_color(RED);
-                        lfb_print!(">>> Killed threads 1 & 2\n");
+                        buff_set_cursor_pos(0, COUNTER_START_Y + 16);
+                        buff_set_color(RED);
+                        buff_print!(">>> Killed threads 1 & 2\n");
                     }
 
                     if THREAD_COUNTERS[thread_index] == 10000 {
                         THREAD_ACTIVE[0] = false;
-                        lfb_set_cursor_pos(0, COUNTER_START_Y + 32);
-                        lfb_set_color(RED);
-                        lfb_print!(">>> Demo complete!\n");
+                        buff_set_cursor_pos(0, COUNTER_START_Y + 32);
+                        buff_set_color(RED);
+                        buff_print!(">>> Demo complete!\n");
 
                         // redraw prompt for shell
-                        lfb_set_color(HHU_BLUE);
-                        lfb_print!("yozora$ ");
-                        lfb_set_color(WHITE);
+                        buff_set_color(HHU_BLUE);
+                        buff_print!("yozora$ ");
+                        buff_set_color(WHITE);
 
                         for _ in 0..10 { scheduler.yield_cpu(); }
                         scheduler.exit();
@@ -109,13 +109,13 @@ fn thread_entry() {
 }
 
 pub fn run() {
-    lfb_print!("Starting Thread Demo\n");
+    buff_print!("Starting Thread Demo\n");
 
     let counter_thread = Thread::new(thread_entry);
     let scheduler = get_scheduler();
     scheduler.ready(counter_thread);
 
-    lfb_print!("Running Test: Three Counters with Kill/Exit\n\n");
+    buff_print!("Running Test: Three Counters with Kill/Exit\n\n");
 
     // Test 2: Three counter threads
     unsafe {
