@@ -105,25 +105,16 @@ impl CGA {
             self.index_port.outb(CGA_LOW_BYTE_CMD);
             low = self.data_port.inb();
         }
-        //kprintln!("high : {}, low : {}", high, low);
         let pos = (high as u16) << 8 | (low as u16);
-        //kprintln!("{}", pos);
         let y = (pos as usize) / CGA_COLUMNS;
-        //let x = (pos as usize) % CGA_COLUMNS;
         let x = (pos as usize) - y* CGA_COLUMNS;
 
-
-
-        //kprintln!("x: {}, y: {}", x, y);
 
         (x, y)
     }
 
     /// Set cursor position `x`,`y`
     pub fn setpos(&mut self, x: usize, y: usize) {
-        // if x > CGA_COLUMNS || y > CGA_ROWS {
-        //     return;
-        // }
 
         let pos = y * CGA_COLUMNS + x;
 

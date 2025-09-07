@@ -32,7 +32,6 @@ impl<T> Spinlock<T> {
         let before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
 
         if before {
-            // lock was held
             return None;
         }
 
@@ -49,8 +48,6 @@ impl<T> Spinlock<T> {
             unsafe {
                 asm!("pause");
             }
-
-            // new try, busypolling
             before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
         }
 
@@ -68,7 +65,7 @@ impl<T> Spinlock<T> {
     pub fn unlock(&self) {
 
         if !self.is_locked() {
-            panic!("Spinlock is not locked, cannot unlock");
+            panic!("Spinlock is not locked");
         }
 
         self.lock.store(false, core::sync::atomic::Ordering::Release);
@@ -77,10 +74,7 @@ impl<T> Spinlock<T> {
 
     /// Forcefully unlock the spinlock. This should only be used in exceptional cases.
     pub unsafe fn force_unlock(&self) {
-
-        //TODO: unsicher ob das richtig ist
         self.lock.store(false, core::sync::atomic::Ordering::Release);
-
     }
 }
 

@@ -32,13 +32,13 @@ unsafe extern "C" fn coroutine_start(stack_ptr: usize) {
         naked_asm!(
 
            /* Hier muss Code eingefuegt werden */
-            "mov rsp, rdi",          // Load stack pointer
-            "xor rbp, rbp",          // Clear base pointer
-            "popf",                  // Restore flags
-            "pop rbp",               // Restore base pointer
-            "pop rdi",               // Restore coroutine pointer
-            "pop rsi",               // Dummy pop (alignment)
-            "pop rdx",               // Restore registers
+            "mov rsp, rdi",
+            "xor rbp, rbp",
+            "popf",
+            "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rdx",
             "pop rcx",
             "pop rbx",
             "pop rax",

@@ -56,10 +56,6 @@ pub fn wait(ms: usize) {
 
 }
 
-/* ╔═════════════════════════════════════════════════════════════════════════╗
-   ║ Interrupt service routine implementation.                               ║
-   ╚═════════════════════════════════════════════════════════════════════════╝ */
-
 /// Register the timer interrupt handler.
 pub fn plugin() {
 
@@ -85,11 +81,9 @@ struct TimerISR {
 impl ISR for TimerISR {
     fn trigger(&self) {
 
-        //add 1 to the global system time
         let current_time = SYSTEM_TIME.fetch_add(self.interval_ms, core::sync::atomic::Ordering::Relaxed);
 
         if current_time % 250 == 0 {
-            //update spinner every 1000 ms
             if !get_scheduler().is_locked() && !is_locked() && is_lfb_initialized() {
                 if let Some(mut lfb) = get_lfb().try_lock() {
                     let spinner_index = (current_time / 250) % SPINNER_CHARS.len();
@@ -103,18 +97,13 @@ impl ISR for TimerISR {
                 }
             }
         }
-
         unsafe {
             INT_VECTORS.force_unlock();
         }
-        // Call the scheduler to switch to the next thread
         get_scheduler().yield_cpu();
     }
 }
 
-/* ╔═════════════════════════════════════════════════════════════════════════╗
-   ║ Implementation of the PIT driver itself.                                ║
-   ╚═════════════════════════════════════════════════════════════════════════╝ */
 
 /// Represents the programmable interval timer.
 struct Timer {
@@ -133,10 +122,6 @@ impl Timer {
 
     /// Set the timer interrupt interval in milliseconds.
     pub fn set_interrupt_interval(&mut self, interval_ms: usize) {
-
-        //Verwenden Sie hierfür im PIT den Zähler 0 und Modus 3 und
-        // laden Sie den Zähler mit einem passenden Wert, sodass der PIT jede Millisekunde ein Interrupt ausgelöst.
-        // 0x36, da counter 0, RW auf 11 wieder, mode ist 3 also 011 und 0 wieder am ende
         let divisor = TIMER_FREQ / 1000 / interval_ms; // Timer auf ms
 
         unsafe {

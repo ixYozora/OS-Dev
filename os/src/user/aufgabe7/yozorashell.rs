@@ -12,8 +12,6 @@ use crate::kernel::threads::thread;
 use crate::{buff_print, devices::buff_print::{buff_print, buff_clear, buff_set_color}};
 use crate::devices::lfb::WHITE;
 
-
-// Shell appearance / limits
 const PROMPT: &str = "yozora$ ";
 const SHELL_BANNER: &str = r#"
  __    __
@@ -32,7 +30,7 @@ const SHELL_BANNER: &str = r#"
     \/_____/\/_/\/_/\/____/\/____/\/____/
 "#;
 
-const SHELL_VERSION: &str = "yozora-shell v0.1 (custom)";
+const SHELL_VERSION: &str = "yozora-shell v0.1";
 const INPUT_CAP: usize = 128;
 const HISTORY_CAP: usize = 24;
 
@@ -44,7 +42,6 @@ pub struct YozoraShell {
     // index for navigating history: None means "editing current buffer"
     hist_cursor: Option<usize>,
 }
-
 
 fn run_text_demo() {
     crate::user::aufgabe1::text_demo::run();
@@ -169,7 +166,7 @@ impl YozoraShell {
     fn is_background_command(&self, line: &str) -> bool {
         // split once to get command
         let cmd = line.split_whitespace().next().unwrap_or("");
-        matches!(cmd, "demo" | "gfx" | "sound")
+        matches!(cmd, "demo" | "graphics" | "sound")
     }
 
     fn collect_line(&mut self) -> String {
@@ -255,7 +252,7 @@ impl YozoraShell {
             "clear" => self.cmd_clear(),
             "ver" | "version" => self.cmd_version(),
             "echo" => self.cmd_echo(&args),
-            "threads" => self.cmd_threads(),
+            "tid" => self.cmd_threads(),
             "uptime" => self.cmd_uptime(),
             "history" => self.cmd_history(),
             "graphics" => self.cmd_graphics(),
@@ -265,7 +262,7 @@ impl YozoraShell {
                 buff_print!("Goodbye.\n");
 
                 loop {
-                    // keep the shell alive; adjust as you prefer
+                    // keep the shell alive
                     thread::sleep_ms(1000);
                 }
             }
@@ -276,7 +273,7 @@ impl YozoraShell {
         }
     }
 
-    /* -------- command implementations (different text to your original) -------- */
+    /* -------- command implementations -------- */
 
     fn cmd_help(&self) {
         buff_print!("Commands (Yozora):\n");
@@ -284,7 +281,7 @@ impl YozoraShell {
         buff_print!("  clear          wipe the framebuffer text\n");
         buff_print!("  version|ver    show shell & build info\n");
         buff_print!("  echo <text>    repeat text\n");
-        buff_print!("  threads        quick thread info\n");
+        buff_print!("  tid            current thread id\n");
         buff_print!("  uptime         how long the system runs\n");
         buff_print!("  graphics       launch the graphical demo (if available)\n");
         buff_print!("  sound [name]   play built-in tunes\n");
@@ -301,7 +298,7 @@ impl YozoraShell {
 
     fn cmd_version(&self) {
         buff_print!("{}\n", SHELL_VERSION);
-        buff_print!("Built for x86_64, written for Yozora.\n");
+        buff_print!("Built for x86_64, written by Yozora.\n");
     }
 
     fn cmd_echo(&self, args: &[&str]) {
@@ -402,7 +399,6 @@ impl YozoraShell {
                 get_scheduler().ready(t);
             }
             "graphics" => {
-                // This message is now correct. It calls cmd_graphics, which creates a thread.
                 buff_print!("Launching graphics demo in background thread...\n");
                 self.cmd_graphics();
             }
@@ -418,13 +414,14 @@ impl YozoraShell {
             }
             other => {
                 buff_print!("Unknown demo: {}\n", other);
+                self.draw_prompt();
             }
         }
     }
 }
 
 
-/// convenience entrypoint used by your kernel
+/// convenience entrypoint
 pub fn launch() {
     let mut s = YozoraShell::init();
     s.start();

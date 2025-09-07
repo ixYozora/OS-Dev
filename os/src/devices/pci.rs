@@ -175,9 +175,6 @@ impl PciBus {
     /// The PCI host controller can itself be a multi-function device,
     /// with each function representing a unique "bus" in the PCI hierarchy.
     fn scan(&mut self) {
-        // Check header type of host controller. If it is a multi-function device,
-        // there are multiple host controllers available at bus 0, device 0, function 0-7.
-        // Otherwise, there is only one host controller at bus 0, device 0, function 0.
         let header_type = self.read8(0, 0, 0, Register::HeaderType as u8);
         if header_type & 0x80 == 0 {
             // Single-function device, scan only bus 0, device 0
@@ -206,7 +203,6 @@ impl PciBus {
     fn check_device(&mut self, bus: u8, device: u8) {
         let vendor_id = self.read16(bus, device, 0, Register::VendorId as u8);
         if vendor_id == INVALID_VENDOR_ID {
-            // No device found at this address
             return;
         }
 
@@ -214,7 +210,6 @@ impl PciBus {
 
         let header_type = self.read8(bus, device, 0, Register::HeaderType as u8);
         if header_type & 0x80 != 0 {
-            // Multi-function device, check all functions
             for function in 1..MAX_FUNCTIONS_PER_DEVICE {
                 let vendor_id = self.read16(bus, device, function, Register::VendorId as u8);
                 if vendor_id == INVALID_VENDOR_ID {

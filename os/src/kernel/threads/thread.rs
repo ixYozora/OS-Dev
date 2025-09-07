@@ -32,14 +32,14 @@ unsafe extern "C" fn thread_start(stack_ptr: usize) {
         naked_asm!(
 
             /* Hier muss Code eingefuegt werden */
-            "mov rsp, rdi",          // Load stack pointer
+            "mov rsp, rdi",
             "call unlock_scheduler",
-            "xor rbp, rbp",          // Clear base pointer
-            "popf",                  // Restore flags
-            "pop rbp",               // Restore base pointer
-            "pop rdi",               // Restore thread pointer
-            "pop rsi",               // Dummy pop (alignment)
-            "pop rdx",               // Restore registers
+            "xor rbp, rbp",
+            "popf",
+            "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rdx",
             "pop rcx",
             "pop rbx",
             "pop rax",
@@ -80,11 +80,11 @@ unsafe extern "C" fn thread_switch(current_stack_ptr: *mut usize, next_stack: us
             "push rsi",
             "push rdi",
             "push rbp",
-            "pushf",                  // Save flags
-            "mov [rdi], rsp",         // Save current stack pointer to current_stack_ptr
-            "mov rsp, rsi", // Load next_stack as the new stack pointer
+            "pushf",
+            "mov [rdi], rsp",
+            "mov rsp, rsi",
             "call unlock_scheduler",
-            "popf",                   // Restore flags
+            "popf",
             "pop rbp",
             "pop rdi",
             "pop rsi",

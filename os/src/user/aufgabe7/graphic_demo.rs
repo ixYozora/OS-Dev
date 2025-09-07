@@ -1,5 +1,3 @@
-// graphic_demo.rs
-
 use crate::devices::lfb::{get_lfb, HHU_BLUE, HHU_GREEN, LFB};
 use crate::devices::pcspk;
 use crate::kernel::threads::scheduler::get_scheduler;
@@ -8,20 +6,6 @@ use crate::user::aufgabe7::bmp_hhu;
 
 const MESSAGE: &str = "Welcome to hhuTOS!";
 
-// BEFORE: This function was incorrect because it calls the scheduler.
-/*
-pub fn run() {
-    let draw_thread = Thread::new(draw_demo);
-    let sound_thread = Thread::new(pcspk::tetris);
-
-    let scheduler = get_scheduler();
-    scheduler.ready(draw_thread);
-    scheduler.ready(sound_thread);
-    scheduler.schedule();
-}
-*/
-
-// AFTER: The run function IS the demo. It no longer manages threads or the scheduler.
 pub fn run() {
     // Start a background thread for the sound so it can play during the drawing.
     let sound_thread = Thread::new(pcspk::tetris);

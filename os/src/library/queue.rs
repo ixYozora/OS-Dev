@@ -68,41 +68,7 @@ impl<T> LinkedQueue<T> {
     /// Returns true if an element was removed, false otherwise.
     /// f is a function that takes a reference to the data and returns true if it matches.
     pub fn remove<F>(&mut self, f: F) -> bool
-    where F: Fn(&T) -> bool
-    {
-        // // Case 1: Empty queue
-        // if self.head.is_none() {
-        // return false;
-        // }
-        //
-        // // Case 2: Head matches
-        // if let Some(ref mut head) = self.head {
-        // if f(&head.data) {
-        // let next = head.next.take();
-        // self.head = next;
-        // return true;
-        // }
-        // }
-        //
-        // // Case 3: Search for matching node after head
-        // let mut current = self.head.as_mut().unwrap();
-        // while current.next.is_some() {
-        // let should_remove = {
-        // let next_node = current.next.as_mut().unwrap();
-        // f(&next_node.data)
-        // };
-        // if should_remove {
-        // let next_node = current.next.as_mut().unwrap();
-        // current.next = next_node.next.take();
-        // return true;
-        // }
-        // current = current.next.as_mut().unwrap();
-        // }
-        //
-        // false
-
-
-        // Check if head matches and remove it
+    where F: Fn(&T) -> bool{
         if let Some(mut head) = self.head.take() {
             if f(&head.data) {
                 self.head = head.next.take();
@@ -112,7 +78,6 @@ impl<T> LinkedQueue<T> {
             }
         }
 
-        // Search rest of queue
         let mut current = self.head.as_mut().unwrap();
 
         while let Some(ref mut next_node) = current.next {

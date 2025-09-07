@@ -97,7 +97,6 @@ impl Scheduler {
 
     pub fn ready_after_block(&self, thread: Box<Thread>) {
         let mut state = self.state.lock();
-        // If the scheduler is active, we switch to the new thread.
         state.ready_queue.enqueue(thread);
     }
 
@@ -109,8 +108,6 @@ impl Scheduler {
 
         let next = state.ready_queue.dequeue().unwrap();
 
-        // Set the dequeued thread as the active thread,
-        // overwriting the current one, which we want to exit.
         state.active_thread = Some(next);
 
         unsafe {
@@ -131,10 +128,7 @@ impl Scheduler {
             }
 
             let mut current = state.active_thread.take().unwrap();
-            //safe pointer because cant access after putting back in queue
             let current_ptr = current.as_mut() as *mut Thread;
-
-            //put active thread back in ready queue and get next thread
             if let Some(next) = state.ready_queue.dequeue() {
                 state.active_thread = Some(next);
                 state.ready_queue.enqueue(current);
@@ -142,7 +136,6 @@ impl Scheduler {
                     Thread::switch(current_ptr, state.active_thread.as_mut().unwrap().as_mut());
                 }
             } else {
-                // If there are no threads in the queue, we just keep the current thread.
                 state.active_thread = Some(current);
             }
         }
@@ -154,15 +147,12 @@ impl Scheduler {
 
         let mut state = self.state.lock();
 
-        // If the thread to kill is the active thread, we exit it.
         if let Some(active) = state.active_thread.as_mut() {
             if active.get_id() == to_kill_id {
                 self.exit();
                 return;
             }
         }
-
-        // Otherwise, we search for the thread in the ready queue and remove it.
         state.ready_queue.remove(|thread| thread.get_id() == to_kill_id);
 
     }
@@ -182,7 +172,6 @@ impl Scheduler {
         let interrupts_enabled = cpu::disable_int_nested();
         let mut state = self.state.lock();
         let current_thread = state.active_thread.take().unwrap();
-
         (current_thread, interrupts_enabled)
 
     }

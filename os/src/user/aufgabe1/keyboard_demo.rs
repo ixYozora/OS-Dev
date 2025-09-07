@@ -32,7 +32,7 @@ pub fn run() {
                     buff_print!("\n\nKeyboard demo exited.\n");
                     // Clear any remaining keys from the buffer to prevent carryover
                     clear_keyboard_buffer();
-                    break; // Exit the demo
+                    break;
                 }
                 28 => { // Enter key
                     buff_print!("\n");

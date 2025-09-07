@@ -39,9 +39,7 @@ impl<T> Mutex<T> {
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
 
         let before = self.lock.swap(true, Ordering::Acquire);
-
         if before {
-            // lock was held
             return None;
         }
 
@@ -56,9 +54,7 @@ impl<T> Mutex<T> {
     /// so it can try to acquire the lock again.
     pub fn lock(&self) -> MutexGuard<T> {
 
-        // act as a spinlock if scheduler is not initialized
         if !SCHEDULER_ACTIVE.load(Ordering::Relaxed) {
-            //kprintln!("Mutex::lock() called before scheduler initialization, acting as a spinlock.");
 
             let mut before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
             while before {
@@ -71,16 +67,13 @@ impl<T> Mutex<T> {
             return MutexGuard { lock: self };
         }
 
-        //Scheduler is initialized, so we can block the thread
 
         let mut before = self.lock.swap(true, Ordering::Acquire);
 
         while before {
             let (mut thread_to_be_blocked, interrupt) = get_scheduler().prepare_block();
-            //rust borrowing is...
             let thread_borrow = thread_to_be_blocked.as_mut() as *mut Thread;
 
-            //own scope, because of locking mutex itself
             {
                 self.wait_queue.lock().enqueue(thread_to_be_blocked);
             }
@@ -100,7 +93,6 @@ impl<T> Mutex<T> {
     pub fn is_locked(&self) -> bool {
 
         self.lock.load(Ordering::Relaxed)
-
     }
 
     /// Check if the wait queue is currently locked.
@@ -113,7 +105,7 @@ impl<T> Mutex<T> {
     pub fn unlock(&self) {
 
         if !self.is_locked() {
-            panic!("Mutex is not locked, cannot unlock");
+            panic!("Mutex is not locked");
         }
 
         self.lock.store(false, Ordering::Release);
@@ -122,9 +114,7 @@ impl<T> Mutex<T> {
             return;
         }
 
-        //own scope, because of locking mutex itself
         {
-            //fix von rafael
             let old_int = cpu::disable_int_nested();
             let dequeued = self.wait_queue.lock().dequeue();
             cpu::enable_int_nested(old_int);
@@ -137,9 +127,7 @@ impl<T> Mutex<T> {
     /// Forcefully unlock the mutex without waking up any waiting threads.
     /// This should only be used in exceptional cases.
     pub unsafe fn force_unlock(&self) {
-
         self.lock.store(false, Ordering::Release);
-
     }
 }
 

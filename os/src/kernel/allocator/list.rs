@@ -79,11 +79,12 @@ impl LinkedListAllocator {
     unsafe fn add_free_block(&mut self, addr: usize, size: usize) {
 
         /* Hier muss Code eingefuegt werden */
+        let mut node = ListNode::new(size);
+        node.next = self.head.next.take();
+        let node_ptr = addr as *mut ListNode;
         unsafe {
-            let node = addr as *mut ListNode;
-            (*node).size = size;
-            (*node).next = self.head.next.take();
-            self.head.next = Some(&mut *node);
+            node_ptr.write(node);
+            self.head.next = Some(&mut *node_ptr)
         }
     }
 
@@ -131,18 +132,6 @@ impl LinkedListAllocator {
     }
 
     /// Dump the free list for debugging purposes.
-    // pub fn dump_free_list(&mut self) {
-    //
-    //     /* Hier muss Code eingefuegt werden */
-    //     let mut current = &self.head.next;
-    //     // kprintln!("Free list:");
-    //     while let Some(node) = current {
-    //       //  kprintln!("  block at {:p}, size {}", *node as *const _, node.size);
-    //         current = &node.next;
-    //     }
-    // }
-
-    /// Dump the free list for debugging purposes.
     pub fn dump_free_list(&mut self) {
 
         buff_print!("Dumping free memory list (including dummy element)\n");
@@ -167,13 +156,12 @@ impl LinkedListAllocator {
 
             if alloc_end <= node.end_addr() {
                 let excess_size = node.end_addr() - alloc_end;
-                let split = excess_size >= mem::size_of::<ListNode>(); // Use >= instead of >
+                let split = excess_size >= mem::size_of::<ListNode>();
 
-                // Remove the node from the list
+
                 let node_next = node.next.take();
                 prev.next = node_next;
 
-                // If there's enough space for another block, add it back
                 if split {
                     unsafe {
                         self.add_free_block(alloc_end, excess_size);
@@ -189,7 +177,6 @@ impl LinkedListAllocator {
 
     pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         let (size, _) = Self::size_align(layout);
-        // Calculate the actual block start (including the ListNode header space)
         let block_start = ptr as usize - mem::size_of::<ListNode>();
         let total_size = size + mem::size_of::<ListNode>();
 

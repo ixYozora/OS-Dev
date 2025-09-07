@@ -99,8 +99,8 @@ const PREFIX1: u8   = 0xe0;
 const PREFIX2:u8    = 0xe1;
 
 // Keyboard IO-ports
-const KBD_CTRL_PORT:u16 = 0x64;    // Status- (R) u. Steuerregister (W)
-const KBD_DATA_PORT:u16 = 0x60;    // Ausgabe- (R) u. Eingabepuffer (W)
+const KBD_CTRL_PORT:u16 = 0x64;
+const KBD_DATA_PORT:u16 = 0x60;
 
 // Bits in the keyboard status register
 const KBD_OUTB: u8 = 0x01;
@@ -115,9 +115,6 @@ const KBD_CMD_CPU_RESET: u8 = 0xfe;
 // Keyboard replies
 const KBD_REPLY_ACK:u8 = 0xfa;
 
-/* ╔═════════════════════════════════════════════════════════════════════════╗
-   ║ Interrupt service routine implementation.                               ║
-   ╚═════════════════════════════════════════════════════════════════════════╝ */
 
 /// Register the keyboard interrupt handler.
 pub fn plugin() {
@@ -137,10 +134,6 @@ impl ISR for KeyboardISR {
     }
 }
 
-
-/* ╔═════════════════════════════════════════════════════════════════════════╗
-   ║ Key buffer implementation.                                              ║
-   ╚═════════════════════════════════════════════════════════════════════════╝ */
 
 /// Represents a first in first out queue for keyboard keys.
 /// It uses a multi-producer multi-consumer queue from the nolock crate,
@@ -177,7 +170,6 @@ impl KeyQueue {
     /// If the queue is empty, None is returned.
     pub fn get_last_key(&self) -> Option<Key> {
         if self.receiver.is_closed() {
-            // Should never haven
             panic!("KeyQueue is closed!");
         }
 
@@ -191,7 +183,6 @@ impl KeyQueue {
     /// If the queue is empty, the function blocks until a key is available.
     pub fn wait_for_key(&self) -> Key {
         if self.receiver.is_closed() {
-            // Should never haven
             panic!("KeyQueue is closed!");
         }
 
@@ -440,13 +431,10 @@ impl Keyboard {
                 status = self.control_port.inb();
             }
         }
-
-        //Befehlsbyte in Data-Port schreiben
         unsafe {
             self.data_port.outb(KBD_CMD_SET_SPEED);
         }
 
-        //Warten bis eine Antwort vorliegt → Bit-0 OUTB im Status-Register prüfen
         let mut ack:u8 = 0;
         while (ack & KBD_OUTB) == 0 {
             unsafe {
@@ -454,35 +442,31 @@ impl Keyboard {
             }
         }
 
-        //Antwort vom Data-Port einlesen
         let answer:u8;
         unsafe {
             answer = self.data_port.inb();
         }
-        //Falls kein ACK vorliegt (= 0xFA) abbrechen und -1 zurückgeben
         if answer != KBD_REPLY_ACK {
             println!("NOACK");
             return;
         }
-        //Sonst Datenbyte in Data-Port schreiben
-        //DEMO
+
         unsafe {
             self.data_port.outb(speed);
         }
-        //Warten bis eine Antwort vorliegt → Bit-0 im Status-Register prüfen
+
         let mut status2:u8 = 0;
         while (status2 & KBD_OUTB) == 0  {
             unsafe {
                 status2 = self.control_port.inb();
             }
         }
-        //Antwort vom Data-Port einlesen
+
         let answer2:u8;
         unsafe {
             answer2 = self.data_port.inb();
         }
 
-        //Falls kein ACK vorliegt (= 0xFA) -1 zurückgeben, sonst 0
         if answer2 != KBD_REPLY_ACK {
             println!("NOACK");
             return;
@@ -494,23 +478,8 @@ impl Keyboard {
     /// Multiple LEDs can be set at the same time as a bit mask.
     /// 1 = Caps Lock, 2 = Num Lock, 4 = Scroll Lock
     pub fn set_led(&mut self, led: u8, on: bool) {
-
-        /*****************************************************************************
-         * Funktion:        set_led                                                  *
-         *---------------------------------------------------------------------------*
-         * Beschreibung:    Setzt oder loescht die angegebene Leuchtdiode.           *
-         *                                                                           *
-         * Parameter:                                                                *
-         *      led:        Welche LED? (caps_lock, num_lock, scroll_lock)           *
-         *      on:         0 = aus, 1 = an                                          *
-         *****************************************************************************/
-
+        //not needed
     }
-
-    /* ╔═════════════════════════════════════════════════════════════════════════╗
-       ║ Implementation of the keyboard driver itself.                           ║
-       ╚═════════════════════════════════════════════════════════════════════════╝ */
-
 
     fn key_hit_irq(&mut self) -> Option<Key> {
         let mut status = 0;

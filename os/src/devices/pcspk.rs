@@ -126,7 +126,7 @@ impl Speaker {
     pub fn off(&mut self) {
         unsafe {
             let mut val = self.ppi_port.inb();
-            val &= !0x03; // Bits 0 und 1 auf 0 setzen
+            val &= !0x03;
             self.ppi_port.outb(val);
         }
     }
@@ -157,18 +157,18 @@ impl Speaker {
             self.pit_data0_port.outb(((counter >> 8) & 0xFF) as u8);
         }
 
-        let mut milliseconds_passed = 0;
-        let mut last_counter = self.read_counter();
+        let mut millis = 0;
+        let mut last = self.read_counter();
 
         // Wait for the specified duration
-        while milliseconds_passed < duration {
-            let current_counter = self.read_counter();
+        while millis < duration {
+            let c = self.read_counter();
 
-            if current_counter > last_counter {
-                milliseconds_passed += 1;
+            if c> last{
+                millis += 1;
             }
 
-            last_counter = current_counter;
+            last = c;
         }
 
     }
