@@ -115,7 +115,7 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
             }
         }
     } else {
-        // No framebuffer info -> likely CGA mode
+       
 
     }
 }
