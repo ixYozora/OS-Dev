@@ -1,61 +1,129 @@
-# Aufgabe 7: Eine eigene BS-Erweiterung / Anwendung
+# A tiny x86_64 OS in Rust (graphics, preemptive threads, shell)
 
-## Lernziele
-1. Eine Anwendung schreiben
-2. Alternativ eine Betriebssystem-Komponente entwickeln
+## Overview
+A teaching/learning OS kernel for x86_64 written in Rust.
 
-## Mögliche Themenrichtungen
-- Grafikdemo (multithreaded)
-- Retro-Spiel (z.B. Snake, Pacman, ...)
-- einfache Shell (Beispiele für Befehle: clear, time, meminfo, ...) 
-- Scheduler mit Prioriäten (mit einer Demo)
+- Preemptive round‑robin threads (PIT 1 kHz) with cooperative yield support
+- Interrupt pipeline: PIC remap, IDT setup, Rust interrupt dispatcher
+- Hand‑written context switch in assembly (naked functions)
+- Custom concurrency primitives: Spinlock and Mutex with waiter queue
+- Linear Framebuffer (graphics) with text rendering (8×8 font)
+- Graphics shell with history/line editing and async demo launcher
+- PC speaker driver (PIT channel 2) playing simple tunes
+- Heap allocator (linked‑list/free‑list) with demo and free‑list dump
+- Minimal PCI bus scan example
 
-## Vorgabe
-Die Vorgabe umfasst einige Dateien, um einen Grafikmodus nutzen zu können. Außerdem enthält sie Code, mit dem der PCI-Bus nach Geräten gescannt wird.
+## Demos
+- `text`: formatted number output
+- `keyboard`: live key echo (Enter/Backspace/ESC)
+- `heap`: Box allocation/free + free‑list dump
+- `sound`: PC speaker tunes (`tetris`, `aerodynamic`)
+- `graphics`: simple LFB drawing
+- `threads`: 3 counters + kill/exit flow
+- `synchronize`: lock competition (Mutex vs Spinlock visualization)
 
-### Grafikfunktionen 
-Vorhanden sind nur sehr grundlegende Grafik-Funktionen, inkl. einer Text-Ausgabe mit einer Schriftart. Weitere Funktionen sollen je nach Anwendung ergänzt werden. 
+## Architecture (big picture)
+- Boot and init:
+  - PIC and IDT loaded; keyboard and PIT plug in
+  - Multiboot framebuffer initialized (e.g., 800×600×32)
+  - Scheduler created with idle + shell thread; `schedule()` starts them
+- Interrupt pipeline:
+  - Device → PIC (0x20–0x2F) → IDT → ASM stub → Rust dispatcher → registered ISR
+  - TimerISR: increments system time, tries to draw a spinner (`try_lock`), force‑unlocks dispatcher lock, then opportunistically calls `scheduler.yield_cpu()`
 
-Ob das System im Grafik- oder Textmodus startet wird in `boot/boot.asm`durch die die Konstante `TEXT_MODE` festgelegt. Wenn diese Konstante aukommentiert wird, so schaltet `grub` direkt in den Grafikmodus (800x600 mit 32 Bit pro Pixel). Eine alternative Grafikauflösung kann durch die Konstanten `MULTIBOOT_GRAPHICS_*` in  `boot/boot.asm` eingestellt werden. Mögliche Auflösungen sollten sich an dem VESA-Standard orientieren, siehe hier: [VESA](https://en.wikipedia.org/wiki/VESA_BIOS_Extensions). Es sollte immer ein Modus mit 4 Byte pro Pixel als Farbtiefe verwendet werden.
+## Scheduling and threads
+- Round‑robin (no priorities): one active thread, others in a FIFO `ready_queue`
+- Cooperative yield: `yield_cpu()` moves active → end of queue
+- Preemption: PIT ISR triggers yield when safe (scheduler lock `try_lock` succeeds and allocator not locked)
+- Context switch (ASM):
+  - Save regs/flags on old stack; store old `rsp`
+  - Load next `rsp`; immediately call `unlock_scheduler` (Rust scope won’t drop the lock)
+  - Restore regs/flags; `ret` to next thread (continuation or first‑time kickoff)
 
-Da jeder Pixel von der CPU einzeln im Grafikspeicher gesetzt werden muss, kann das Zeichnen komplexer Szenen schnell langsam werden. Eine deutliche Performance-Steigerung erhält man mit einem Release-Build, bei dem Compiler-Optimierungen aktiviert sind. Allerdings kann dann nicht mehr debuggt werden. Einen solchen Build erstellt man mit dem folgenden Befehl:
-```bash
-cargo make --profile production qemu
-```
+## Concurrency (Spinlock & Mutex)
+- Spinlock
+  - Busy‑wait on an `AtomicBool` (`swap(true)`); very short critical sections
+  - Used where blocking is not allowed (e.g., internal wait queues, interrupt dispatcher)
+- Mutex with waiter queue
+  - `lock()`: if busy, `prepare_block()` current thread, enqueue to `mutex.wait_queue`, `switch_from_blocked_thread()`
+  - `unlock()`: `store(false)` and `ready_after_block()` exactly one waiter (no immediate switch)
+  - Fair (FIFO), efficient under contention (no busy‑wait)
+- ISR rule: never block; use `try_lock` only
 
-Die Textausgabe über CGA funktioniert nicht im Grafikmodus! Ein Beispiel für die Textausgabe befindet sich in der Vorgabe in `user/aufgabe7/graphic_demo.rs`, siehe auch nachstehendes Bild.
+## Graphics output (LFB & Writer)
+- LFB (linear framebuffer) 32bpp ARGB
+- Writer (global, `Mutex`‑protected) handles color, cursor, newline, backspace, scroll
+- `buff_print!`:
+  - Locks Writer → locks LFB once per string → renders → unlocks (atomic, flicker‑free)
+- Spinner (top‑right heartbeat):
+  - Drawn from TimerISR every 250 ms only if `try_lock` succeeds and scheduler/allocator are free
 
-Folgende Dateien sind für die Grafik-Unterstützung in der Vorgabe:
-- `startup.rs`: Bekommt jetzt eine Mutltiboot-Referenz als Parameter
-- `devices/lfb.rs`: Zeichenfunktionen im Grafikmodus
-- `devices/font_8x8.rs`: Bitmap-Font für die Textausgabe im Grafikmodus
-- `kernel/cpu.rs`: Erweiterte IO-Port Befehle zum Schreiben von 16-/32-Bit Werten.
-- `kernel/multiboot.rs`: Struct-Definition für Bootloader-Daten, die gemäß des [Multiboot](https://www.gnu.org/software/grub/manual/multiboot/multiboot.html)-Protokolls an den Kernel übergen werden.
-- `user/aufgabe7/graphic_demo.rs`: Kleine Grafikdemo (siehe Bild unten)
-- `user/aufgabe7/bmp_hhu.rs`: HHU-Logo als Bitmap
-- `cbmp2rs.c`: Kleines C-Programm zum Konvertieren von Bildern, gespeichert von GIMP als C-Source, siehe auch `Graphics-Rust.pdf`.
+## PC speaker
+- Tone: PIT channel 2 (0x42), Mode 3 (0xB6), divisor = `1193180 / freq`
+- On/off via PPI 0x61 bits
+- Duration via `pit::wait(ms)` using `SYSTEM_TIME` (do not touch PIT channel 0)
 
-**Beispielausgabe der Grafikdemo**
+## Heap allocator
+- Linked‑list (free‑list) allocator
+  - Splits blocks on allocation; dumps free list for debugging
+  - Note: provided code does not coalesce adjacent free blocks on free
+- Heap demo shows before/after states and object address
 
-![lfb](img/lfb.png)
+## Build and run
+Requirements:
+- Rust nightly, `cargo`, `cargo-make`
+- `qemu-system-x86_64`
+- `nasm` (for boot code)
 
-### PCI
-Mit dem Quellcode in `devices/pci.rs` kann der PCI-Bus nach vorhandenen Geräten abgesucht werden. In `startup.rs` ist ein kleines Beispiel, welches nach einer Realtek RTL8139 Netzwerkkarte sucht und deren MAC-Adresse ausliest. Dies ist nur als kleine Demo gedacht, für diejenigen, die sich für Treiber-Programmierung interessieren und auch mal mit komplexeren Geräten als z.B. dem PIT arbeiten möchten. So etwas wäre auch als Abgabe denkbar. Dann muss allerdings je nach ausgesuchter Hardware kein voll funktionsfähiger Treiber implementiert werden, da dies den Aufwand der Aufgabe übersteigen würde. Gut dokumentierte PCI-Geräte sind z.B. die Realtek RTL8139 Netzwerkkarte oder ein IDE Festplatten Controller. Dazu findet man auch Artikel im OSDev-Wiki.
+Build:
+- Development: `cargo make qemu`
+- Optimized (faster graphics): `cargo make --profile production qemu`
 
-Wenn die Vorgabe richtig eingebaut wurde, sollten beim Booten folgenden Meldungen über die serielle Schnittstelle ausgegeben werden:
+QEMU audio (PC speaker):
+- Newer QEMU: `-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0`
+- Some builds: `-soundhw pcspk`
 
-```
-Scanning PCI bus
-Found PCI device 8086:1237
-Found PCI device 8086:7000
-Found PCI device 8086:7010
-Found PCI device 8086:7113
-Found PCI device 1234:1111
-Found PCI device 10ec:8139
-Found Realtek RTL8139 network controller
-RTL8139 I/O base address: 0xc000
-MAC address: [52, 54, 0, 12, 34, 56]
-```
+Graphics vs text mode:
+- In `boot/boot.asm`, comment out `TEXT_MODE` to boot graphics (e.g., 800×600×32)
+- Adjust `MULTIBOOT_GRAPHICS_*` if needed (VESA‑like modes)
+
+## Repository layout (key parts)
+- `boot/`: bootloader bits (Multiboot), graphics toggles
+- `startup.rs`: init devices, LFB, spawn shell, start scheduler
+- `kernel/`
+  - `interrupts/`: IDT, PIC, Rust dispatcher (`INT_VECTORS`)
+  - `threads/`: `thread`, `scheduler` (ready queue), ASM switching
+  - `coroutines/`: coroutine task (educational stepping stone)
+  - `allocator/`: bump and linked‑list allocators
+- `devices/`
+  - `keyboard`, `cga` (text), `lfb` (graphics), `pcspk` (speaker), `pci`, `kprint`
+  - `buff_print/`: Writer‑based text output over LFB
+- `library/`
+  - `queue` (linked queue), `spinlock`, `mutex` (with waiter queue)
+- `user/`: demos
+
+## Safety & locking rules
+- In ISRs:
+  - Minimal work, no blocking, only `try_lock`
+  - TimerISR: force‑unlock `INT_VECTORS` before thread switch (you don’t return normally)
+- During thread switch (ASM):
+  - Immediately call `unlock_scheduler` after stack switch
+- Opportunistic preemption:
+  - Switch only if scheduler lock is free (`try_lock`) and allocator not locked
+- Fixed lock order for output: Writer → LFB
+- Allocator:
+  - Scheduler checks `allocator::is_locked()` before preemptive switch
+
+## Known limitations
+- Linked‑list allocator does not coalesce free blocks (fragmentation can grow)
+- Single‑core, APIC/SMP not implemented
+- Educational design with conservative ISR policies
+
+## Extending
+Add a thread:
+```rust
+let t = Thread::new(my_fn);
+get_scheduler().ready(t);
 
 Folgende Dateien sind für die PCI-Unterstützung in der Vorgabe:
 - `Makefile.toml`: Enthält kleine Änderungen um QEMU mit einer emulierten einer Realtek RTL8139 Netzwerkkarte zu starten
