@@ -119,13 +119,6 @@ Graphics vs text mode:
 - Single‑core, APIC/SMP not implemented
 - Educational design with conservative ISR policies
 
-## Extending
-Add a thread:
-```rust
-let t = Thread::new(my_fn);
-get_scheduler().ready(t);
-
-Folgende Dateien sind für die PCI-Unterstützung in der Vorgabe:
-- `Makefile.toml`: Enthält kleine Änderungen um QEMU mit einer emulierten einer Realtek RTL8139 Netzwerkkarte zu starten
-- `startup.rs`: Sucht den PCI-Bus nach einer Realtek RTL8139 Netzwerkkarte ab
-- `devices/pci.rs`: Treiber für den PCI-Bus
+## Credits
+- Allocator design inspired by Philipp Oppermann (https://os.phil-opp.com/allocator-designs/)
+- Course templates and tasks by Michael Schoettner (HHU)
