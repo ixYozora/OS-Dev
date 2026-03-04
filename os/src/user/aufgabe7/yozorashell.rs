@@ -346,13 +346,13 @@ impl YozoraShell {
         match args[0] {
             "tetris" => {
                 buff_print!("Queuing Tetris theme...\n");
-                let t = thread::Thread::new(crate::devices::pcspk::tetris);
+                let t = thread::Thread::new_kernel_thread(crate::devices::pcspk::tetris);
                 get_scheduler().ready(t);
                 self.draw_prompt();
             }
             "aerodynamic" => {
                 buff_print!("Queuing Aerodynamic...\n");
-                let t = thread::Thread::new(crate::devices::pcspk::aerodynamic);
+                let t = thread::Thread::new_kernel_thread(crate::devices::pcspk::aerodynamic);
                 get_scheduler().ready(t);
                 self.draw_prompt();
             }
@@ -367,7 +367,7 @@ impl YozoraShell {
             buff_print!("No framebuffer — graphics unavailable.\n");
             return;
         }
-        let t = Thread::new(run_graphics_demo);
+        let t = Thread::new_kernel_thread(run_graphics_demo);
         get_scheduler().ready(t);
     }
 
@@ -381,7 +381,7 @@ impl YozoraShell {
         match args[0] {
             "text" => {
                 buff_print!("Launching text demo in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_text_demo);
+                let t = crate::kernel::threads::thread::Thread::new_kernel_thread(run_text_demo);
                 get_scheduler().ready(t);
             }
             "keyboard" => {
@@ -390,12 +390,12 @@ impl YozoraShell {
             }
             "heap" => {
                 buff_print!("Launching heap in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_heap_demo);
+                let t = crate::kernel::threads::thread::Thread::new_kernel_thread(run_heap_demo);
                 get_scheduler().ready(t);
             }
             "sound" => {
                 buff_print!("Launching sound demo in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_sound_demo);
+                let t = crate::kernel::threads::thread::Thread::new_kernel_thread(run_sound_demo);
                 get_scheduler().ready(t);
             }
             "graphics" => {
@@ -404,12 +404,12 @@ impl YozoraShell {
             }
             "threads" => {
                 buff_print!("Launching threads demo in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_threads_demo);
+                let t = crate::kernel::threads::thread::Thread::new_kernel_thread(run_threads_demo);
                 get_scheduler().ready(t);
             }
             "synchronize" =>{
                 buff_print!("Launching mutex with queue demo in background thread...\n");
-                let t = crate::kernel::threads::thread::Thread::new(run_synchronize_demo);
+                let t = crate::kernel::threads::thread::Thread::new_kernel_thread(run_synchronize_demo);
                 get_scheduler().ready(t);
             }
             other => {

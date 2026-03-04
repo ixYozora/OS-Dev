@@ -111,7 +111,7 @@ fn thread_entry() {
 pub fn run() {
     buff_print!("Starting Thread Demo\n");
 
-    let counter_thread = Thread::new(thread_entry);
+    let counter_thread = Thread::new_kernel_thread(thread_entry);
     let scheduler = get_scheduler();
     scheduler.ready(counter_thread);
 
@@ -125,9 +125,9 @@ pub fn run() {
     }
 
     let threads = [
-        Thread::new(thread_entry),
-        Thread::new(thread_entry),
-        Thread::new(thread_entry),
+        Thread::new_kernel_thread(thread_entry),
+        Thread::new_kernel_thread(thread_entry),
+        Thread::new_kernel_thread(thread_entry),
     ];
 
     unsafe {

@@ -14,7 +14,7 @@
 ;
 
 ; Auskommentieren, um im Grafikmodus zu booten
-;%define TEXT_MODE
+%define TEXT_MODE
 
  
 ; Lade-Adresse des Kernels, muss mit der Angabe in 'sections' konsistent sein!
@@ -41,6 +41,8 @@ pagetable_end:  equ 0x200000      ;  = 2 MB
 ; Von uns bereitgestellte Funktionen
 [GLOBAL start]
 [GLOBAL idt]
+[GLOBAL _tss_set_base_address]
+[GLOBAL _tss_set_rsp0]
 
 ; C-Funktion die am Ende des Assembler-Codes aufgerufen werden
 [EXTERN startup]
@@ -234,7 +236,14 @@ clear_bss:
 	jne    clear_bss
 
 ;	fninit         ; FPU aktivieren
-	
+
+	; TSS-Basisadresse in GDT-Deskriptor eintragen
+	call   _tss_set_base_address
+
+	; Task-Register laden (TSS-Selektor = 0x30)
+	mov    ax, 0x30
+	ltr    ax
+
     mov    rdi, [multiboot_info_address] ; 1. Parameter wird in rdi uebergeben
 	call   startup ; multiboot infos auslesen und 'main' aufrufen
 	
@@ -242,6 +251,28 @@ clear_bss:
 	hlt
 
 
+
+;
+; TSS-Basisadresse in den TSS-Deskriptor der GDT schreiben
+;
+_tss_set_base_address:
+	mov    rax, _tss
+	mov    [_tss_descriptor + 2], ax       ; Basis[15:0]
+	shr    rax, 16
+	mov    [_tss_descriptor + 4], al       ; Basis[23:16]
+	shr    rax, 8
+	mov    [_tss_descriptor + 7], al       ; Basis[31:24]
+	shr    rax, 8
+	mov    [_tss_descriptor + 8], eax      ; Basis[63:32]
+	ret
+
+;
+; Kernel-Stack-Zeiger (rsp0) im TSS setzen
+; Parameter: rdi = neuer rsp0-Wert
+;
+_tss_set_rsp0:
+	mov    [_tss + 4], rdi
+	ret
 
 ;
 ; Kurze Verzögerung für in/out-Befehle
@@ -272,30 +303,72 @@ __cxa_pure_virtual: ; "virtual" Methode ohne Implementierung aufgerufen
 gdt:
 	dw  0,0,0,0   ; NULL-Deskriptor
 
-	; 32-Bit-Codesegment-Deskriptor
+	; 32-Bit-Codesegment-Deskriptor (Selektor 0x08)
 	dw  0xFFFF    ; 4Gb - (0x100000*0x1000 = 4Gb)
 	dw  0x0000    ; base address=0
 	dw  0x9A00    ; code read/exec
 	dw  0x00CF    ; granularity=4096, 386 (+5th nibble of limit)
 
-	; 64-Bit-Codesegment-Deskriptor
+	; 64-Bit-Codesegment-Deskriptor (Selektor 0x10, Ring 0)
 	dw  0xFFFF    ; 4Gb - (0x100000*0x1000 = 4Gb)
 	dw  0x0000    ; base address=0
 	dw  0x9A00    ; code read/exec
 	dw  0x00AF    ; granularity=4096, 386 (+5th nibble of limit), Long-Mode
 
-	; Datensegment-Deskriptor
+	; Datensegment-Deskriptor (Selektor 0x18, Ring 0)
 	dw  0xFFFF    ; 4Gb - (0x100000*0x1000 = 4Gb)
 	dw  0x0000    ; base address=0
 	dw  0x9200    ; data read/write
 	dw  0x00CF    ; granularity=4096, 386 (+5th nibble of limit)
 
+	; 64-Bit User-Codesegment-Deskriptor (Selektor 0x20, Ring 3)
+	dw  0xFFFF
+	dw  0x0000
+	dw  0xFA00    ; P=1, DPL=3, S=1, Type=1010 (code exec/read)
+	dw  0x00AF    ; Long-Mode
+
+	; User-Datensegment-Deskriptor (Selektor 0x28, Ring 3)
+	dw  0xFFFF
+	dw  0x0000
+	dw  0xF200    ; P=1, DPL=3, S=1, Type=0010 (data read/write)
+	dw  0x00CF
+
+	; TSS-Deskriptor (Selektor 0x30, doppelte Groesse = 16 Bytes)
+_tss_descriptor:
+	dw  0x0067    ; Limit[15:0] = 103 (TSS-Groesse - 1)
+	dw  0x0000    ; Basis[15:0]  (wird zur Laufzeit gesetzt)
+	db  0x00      ; Basis[23:16] (wird zur Laufzeit gesetzt)
+	db  0x89      ; P=1, DPL=0, S=0, Type=1001 (64-Bit TSS, verfuegbar)
+	db  0x00      ; G=0, Limit[19:16]=0
+	db  0x00      ; Basis[31:24] (wird zur Laufzeit gesetzt)
+	dd  0x00000000 ; Basis[63:32] (wird zur Laufzeit gesetzt)
+	dd  0x00000000 ; Reserviert
+
 gdt_80:
-	dw  4*8 - 1   ; GDT Limit=24, 4 GDT Eintraege - 1
-	dq  gdt       ; Adresse der GDT
+	dw  gdt_80 - gdt - 1   ; GDT Limit
+	dq  gdt                 ; Adresse der GDT
 
 multiboot_info_address:
 	dq  0
+
+; Task State Segment (104 Bytes, ohne IO-Bitmap)
+align 8
+_tss:
+	dd  0               ; Offset 0x00: Reserviert
+	dq  0               ; Offset 0x04: RSP0
+	dq  0               ; Offset 0x0C: RSP1
+	dq  0               ; Offset 0x14: RSP2
+	dq  0               ; Offset 0x1C: Reserviert
+	dq  0               ; Offset 0x24: IST1
+	dq  0               ; Offset 0x2C: IST2
+	dq  0               ; Offset 0x34: IST3
+	dq  0               ; Offset 0x3C: IST4
+	dq  0               ; Offset 0x44: IST5
+	dq  0               ; Offset 0x4C: IST6
+	dq  0               ; Offset 0x54: IST7
+	dq  0               ; Offset 0x5C: Reserviert
+	dw  0               ; Offset 0x64: Reserviert
+	dw  104             ; Offset 0x66: IO-Map-Basis = TSS-Groesse (keine IO-Bitmap)
 
 [SECTION .bss]
 

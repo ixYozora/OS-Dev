@@ -189,9 +189,9 @@ pub fn run() {
 
     // Create competing threads
     let threads = [
-        Thread::new(competitive_thread_entry),
-        Thread::new(competitive_thread_entry),
-        Thread::new(competitive_thread_entry),
+        Thread::new_kernel_thread(competitive_thread_entry),
+        Thread::new_kernel_thread(competitive_thread_entry),
+        Thread::new_kernel_thread(competitive_thread_entry),
     ];
 
     // Set control thread ID

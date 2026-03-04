@@ -2,36 +2,38 @@
    ║ Module: thread                                                          ║
    ╟─────────────────────────────────────────────────────────────────────────╢
    ║ Descr.: Functions for creating, starting, switching and ending threads. ║
+   ║         Supports both kernel threads (Ring 0) and user threads (Ring 3).║
    ╟─────────────────────────────────────────────────────────────────────────╢
    ║ Autor:  Michael Schoettner, 15.05.2023                                  ║
    ╚═════════════════════════════════════════════════════════════════════════╝
 */
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::{fmt, ptr};
 use core::arch::naked_asm;
 use core::fmt::Display;
 use core::sync::atomic::AtomicUsize;
+use core::{fmt, ptr};
+
 use crate::consts;
 use crate::consts::STACK_SIZE;
-use crate::kernel::coroutines::coroutine::Coroutine;
-use crate::kernel::cpu;
-use crate::kernel::threads::scheduler;
-use crate::kernel::threads::scheduler::get_scheduler;
 use crate::devices::pit;
+use crate::kernel::cpu;
+use crate::kernel::threads::scheduler::get_scheduler;
+
+unsafe extern "C" {
+    fn _tss_set_rsp0(rsp0: usize);
+}
+
 static THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub fn next_id() -> usize {
     THREAD_ID_COUNTER.fetch_add(1, core::sync::atomic::Ordering::SeqCst)
 }
 
-/// Low-level routine for starting a thread.
 #[naked]
 unsafe extern "C" fn thread_start(stack_ptr: usize) {
     unsafe {
         naked_asm!(
-
-            /* Hier muss Code eingefuegt werden */
             "mov rsp, rdi",
             "call unlock_scheduler",
             "xor rbp, rbp",
@@ -56,15 +58,16 @@ unsafe extern "C" fn thread_start(stack_ptr: usize) {
     }
 }
 
-/// Low-level routine for switching to the next thread.
-/// `current_stack_ptr` is a pointer to `stack_ptr` of the next coroutine (where the rsp is saved).
-/// `next_stack` is the value of `stack_ptr` of the next thread (the new rsp value).
+/// Context switch: save current context, restore next, update TSS rsp0.
+/// `next_stack_end` (rdx) is the top of the next thread's kernel stack for TSS.
 #[naked]
-unsafe extern "C" fn thread_switch(current_stack_ptr: *mut usize, next_stack: usize) {
+unsafe extern "C" fn thread_switch(
+    current_stack_ptr: *mut usize,
+    next_stack: usize,
+    next_stack_end: usize,
+) {
     unsafe {
         naked_asm!(
-
-            /* Hier muss Code eingefuegt werden */
             "push r8",
             "push r9",
             "push r10",
@@ -83,6 +86,8 @@ unsafe extern "C" fn thread_switch(current_stack_ptr: *mut usize, next_stack: us
             "pushf",
             "mov [rdi], rsp",
             "mov rsp, rsi",
+            "mov rdi, rdx",
+            "call _tss_set_rsp0",
             "call unlock_scheduler",
             "popf",
             "pop rbp",
@@ -105,111 +110,166 @@ unsafe extern "C" fn thread_switch(current_stack_ptr: *mut usize, next_stack: us
     }
 }
 
-/// Represents a coroutine in the system.
-/// It contains the stack and the entry function.
-/// Threads must be registered in the scheduler and are run automatically
-/// once the scheduler is started.
+/// Switch to Ring 3 via iretq. Builds the interrupt return frame and executes iretq.
+/// rdi = entry point (RIP), rsi = user stack pointer (RSP)
+#[naked]
+unsafe extern "C" fn thread_user_start(entry: usize, user_stack: usize) {
+    unsafe {
+        naked_asm!(
+            "push 0x2B",                    // SS: user data selector | RPL 3
+            "push rsi",                      // RSP: user stack pointer
+            "pushf",                         // RFLAGS
+            "or qword ptr [rsp], 0x200",     // set IF (bit 9) for user mode
+            "push 0x23",                    // CS: user code selector | RPL 3
+            "push rdi",                      // RIP: entry function
+            "iretq",
+        )
+    }
+}
+
 #[repr(C)]
 pub struct Thread {
     id: usize,
-    stack: Vec<u64>,  // Memory for the stack
-    stack_ptr: usize, // Pointer on the stack to the saved context
+    kernel_stack: Vec<u64>,
+    user_stack: Vec<u64>,
+    stack_ptr: usize,
     entry: fn(),
+    is_kernel_thread: bool,
+}
+
+fn allocate_stack() -> Vec<u64> {
+    let mut stack = Vec::<u64>::with_capacity(STACK_SIZE / 8);
+    for _ in 0..stack.capacity() {
+        stack.push(0);
+    }
+    stack
 }
 
 impl Thread {
-    /// Create a new thread with the given entry function.
-    pub fn new(entry: fn()) -> Box<Thread> {
-        // Allocate memory for the stack and initialize it to zero
-        let mut stack = Vec::<u64>::with_capacity(STACK_SIZE / 8);
-        for _ in 0..stack.capacity() {
-            stack.push(0);
-        }
+    pub fn new_kernel_thread(entry: fn()) -> Box<Thread> {
+        let kernel_stack = allocate_stack();
+        let user_stack = allocate_stack();
+        let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
 
-        // Set the stack pointer to the top of the stack
-        let stack_ptr = ptr::from_ref(&stack[stack.capacity() - 1]) as usize;
+        let mut thread = Box::new(Thread {
+            id: next_id(),
+            kernel_stack,
+            user_stack,
+            stack_ptr,
+            entry,
+            is_kernel_thread: true,
+        });
 
-        // Create a new thread object
-        let mut thread = Box::new(
-            Thread { id: next_id(), stack, stack_ptr, entry }
-        );
-
-        // Prepare the stack for the thread so it can be started via `thread_start()`
-        thread.prepare_stack();
+        thread.prepare_kernel_stack(Thread::kickoff_kernel_thread as u64);
         thread
     }
 
-    /// Start the thread.
-    /// This function is only once by the scheduler.
-    /// The scheduler does further thread switching via `switch()`.
-    pub fn start(&mut self) {
+    pub fn new_user_thread(entry: fn()) -> Box<Thread> {
+        let kernel_stack = allocate_stack();
+        let user_stack = allocate_stack();
+        let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
 
-        /* Hier muss Code eingefuegt werden */
+        let mut thread = Box::new(Thread {
+            id: next_id(),
+            kernel_stack,
+            user_stack,
+            stack_ptr,
+            entry,
+            is_kernel_thread: false,
+        });
+
+        thread.prepare_kernel_stack(Thread::kickoff_user_thread as u64);
+        thread
+    }
+
+    pub fn start(&mut self) {
         unsafe {
             thread_start(self.stack_ptr);
         }
-
     }
 
-    /// Switch from the `current` thread to the `next` thread.
-    /// This function is called by the scheduler to switch between threads.
     pub unsafe fn switch(current: *mut Thread, next: *mut Thread) {
-
-        /* Hier muss Code eingefuegt werden */
         unsafe {
-            let next = next;
             if next.is_null() {
                 panic!("No Thread!");
             }
-            thread_switch(&mut (*current).stack_ptr, (*next).stack_ptr);
+            let next_stack_end = (*next).get_kernel_stack_end();
+            thread_switch(
+                &mut (*current).stack_ptr,
+                (*next).stack_ptr,
+                next_stack_end,
+            );
         }
     }
 
-    /// Get the ID of the thread.
     pub fn get_id(&self) -> usize {
         self.id
     }
 
-    /// Prepare the stack of a newly created thread in a way that it can be used
-    /// to return to the 'kickoff' function with the thread itself as parameter.
-    /// The prepared stack is used in 'thread_start' to start the first thread.
-    /// Other threads are started by 'thread_switch' with the prepared stack.
-    fn prepare_stack(&mut self) {
-        let kickoff = Thread::kickoff as u64;
-        let thread = ptr::from_mut(self) as u64;
-        let length = self.stack.len();
+    fn get_kernel_stack_end(&self) -> usize {
+        let cap = self.kernel_stack.capacity();
+        ptr::from_ref(&self.kernel_stack[cap - 1]) as usize + 8
+    }
 
-        self.stack[length - 1] = 0x131155; // Dummy return address
-        self.stack[length - 2] = kickoff; // Address of 'kickoff'
-        self.stack[length - 3] = 0; // r8
-        self.stack[length - 4] = 0; // r9
-        self.stack[length - 5] = 0; // r10
-        self.stack[length - 6] = 0; // r11
-        self.stack[length - 7] = 0; // r12
-        self.stack[length - 8] = 0; // r13
-        self.stack[length - 9] = 0; // r14
-        self.stack[length - 10] = 0; // r15
-        self.stack[length - 11] = 0; // rax
-        self.stack[length - 12] = 0; // rbx
-        self.stack[length - 13] = 0; // rcx
-        self.stack[length - 14] = 0; // rdx
-        self.stack[length - 15] = 0; // rsi
-        self.stack[length - 16] = thread; // rdi -> First parameter for 'kickoff'
-        self.stack[length - 17] = 0; // rbp
-        self.stack[length - 18] = 0x2; // rflags (IE = 0); interrupts disabled
+    fn get_user_stack_end(&self) -> usize {
+        let cap = self.user_stack.capacity();
+        ptr::from_ref(&self.user_stack[cap - 1]) as usize + 8
+    }
+
+    /// Prepare the kernel stack so that thread_start / thread_switch can
+    /// pop the saved context and `ret` into the given kickoff function.
+    fn prepare_kernel_stack(&mut self, kickoff: u64) {
+        let thread = ptr::from_mut(self) as u64;
+        let length = self.kernel_stack.len();
+
+        self.kernel_stack[length - 1] = 0x131155; // Dummy return address
+        self.kernel_stack[length - 2] = kickoff;
+        self.kernel_stack[length - 3] = 0; // r8
+        self.kernel_stack[length - 4] = 0; // r9
+        self.kernel_stack[length - 5] = 0; // r10
+        self.kernel_stack[length - 6] = 0; // r11
+        self.kernel_stack[length - 7] = 0; // r12
+        self.kernel_stack[length - 8] = 0; // r13
+        self.kernel_stack[length - 9] = 0; // r14
+        self.kernel_stack[length - 10] = 0; // r15
+        self.kernel_stack[length - 11] = 0; // rax
+        self.kernel_stack[length - 12] = 0; // rbx
+        self.kernel_stack[length - 13] = 0; // rcx
+        self.kernel_stack[length - 14] = 0; // rdx
+        self.kernel_stack[length - 15] = 0; // rsi
+        self.kernel_stack[length - 16] = thread; // rdi -> first parameter for kickoff
+        self.kernel_stack[length - 17] = 0; // rbp
+        self.kernel_stack[length - 18] = 0x2; // rflags (IE = 0); interrupts disabled
 
         self.stack_ptr = self.stack_ptr - (consts::STACK_ENTRY_SIZE * 17);
     }
 
-    /// Called indirectly by using the prepared stack in 'thread_start' and 'thread_switch'.
-    fn kickoff(&self) {
-        cpu::enable_int(); // interrupts are disabled during thread start
-        ((*self).entry)();
-
+    /// Kickoff for kernel threads (Ring 0). Sets TSS rsp0, enables interrupts,
+    /// calls the entry function, then exits via the scheduler.
+    fn kickoff_kernel_thread(&self) {
+        let stack_end = self.get_kernel_stack_end();
+        unsafe {
+            _tss_set_rsp0(stack_end);
+        }
+        cpu::enable_int();
+        (self.entry)();
         get_scheduler().exit();
     }
 
+    /// Kickoff for user threads. Sets TSS rsp0, then switches to Ring 3
+    /// via iretq. The entry function runs entirely in user mode.
+    fn kickoff_user_thread(&self) {
+        let stack_end = self.get_kernel_stack_end();
+        unsafe {
+            _tss_set_rsp0(stack_end);
+        }
+        let user_stack = self.get_user_stack_end();
+        unsafe {
+            thread_user_start(self.entry as usize, user_stack);
+        }
+    }
 }
+
 pub fn sleep_ms(ms: usize) {
     pit::wait(ms);
 }

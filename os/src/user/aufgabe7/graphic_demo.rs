@@ -8,7 +8,7 @@ const MESSAGE: &str = "Welcome to hhuTOS!";
 
 pub fn run() {
     // Start a background thread for the sound so it can play during the drawing.
-    let sound_thread = Thread::new(pcspk::tetris);
+    let sound_thread = Thread::new_kernel_thread(pcspk::tetris);
     get_scheduler().ready(sound_thread);
 
     // Lock the framebuffer to get exclusive access for drawing.

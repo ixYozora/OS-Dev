@@ -104,14 +104,17 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
                 let scheduler = get_scheduler();
 
                 // Create shell thread
-                let shell_thread = Thread::new(yozorashell::launch);
+                let shell_thread = Thread::new_kernel_thread(yozorashell::launch);
                 scheduler.ready(shell_thread);
 
                 // Start the scheduler: idle thread + shell thread + any future threads
                 scheduler.schedule();
             }
             FramebufferType::Text => {
-
+                cga::CGA.lock().clear();
+                user::aufgabe8::user_threads::run();
+                let scheduler = get_scheduler();
+                scheduler.schedule();
             }
         }
     } else {
