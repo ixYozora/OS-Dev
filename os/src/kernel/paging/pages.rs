@@ -1,0 +1,186 @@
+use core::ptr;
+use crate::consts::{PAGE_SIZE, STACK_SIZE, USER_STACK_VIRT_END, USER_STACK_VIRT_START};
+use crate::kernel::paging::frames::{PhysAddr, FRAME_ALLOCATOR};
+
+const PAGE_TABLE_ENTRIES: usize = 512;
+
+bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone)]
+    pub struct PageFlags: u64 {
+        const PRESENT = 1 << 0;
+        const WRITEABLE = 1 << 1;
+        const USER = 1 << 2;
+        const WRITE_THROUGH = 1 << 3;
+        const CACHE_DISABLE = 1 << 4;
+        const ACCESSED = 1 << 5;
+        const DIRTY = 1 << 6;
+        const HUGE_PAGE = 1 << 7;
+        const GLOBAL = 1 << 8;
+    }
+}
+
+impl PageFlags {
+    fn kernel_flags() -> Self {
+        Self::PRESENT | Self::WRITEABLE | Self::USER
+    }
+
+    fn user_flags() -> Self {
+        Self::PRESENT | Self::WRITEABLE | Self::USER
+    }
+}
+
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct PageTableEntry(u64);
+
+impl PageTableEntry {
+    fn new(addr: PhysAddr, flags: PageFlags) -> Self {
+        let addr: u64 = addr.into();
+        Self(addr | flags.bits())
+    }
+
+    pub fn set(&mut self, addr: PhysAddr, flags: PageFlags) {
+        *self = PageTableEntry::new(addr, flags);
+    }
+
+    pub fn get_flags(&self) -> PageFlags {
+        PageFlags::from_bits_truncate(self.0)
+    }
+
+    pub fn set_flags(&mut self, flags: PageFlags) {
+        *self = PageTableEntry::new(self.get_addr(), flags);
+    }
+
+    pub fn get_addr(&self) -> PhysAddr {
+        PhysAddr::new(self.0 & 0x000f_ffff_ffff_f000)
+    }
+
+    pub fn set_addr(&mut self, addr: PhysAddr) {
+        *self = PageTableEntry::new(addr, self.get_flags());
+    }
+}
+
+impl core::fmt::Debug for PageTableEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "[addr={:?}, flags={:?}]",
+            self.get_addr(),
+            self.get_flags()
+        )
+    }
+}
+
+#[repr(transparent)]
+pub struct PageTable {
+    entries: [PageTableEntry; PAGE_TABLE_ENTRIES],
+}
+
+impl PageTable {
+    /// Get or allocate the child page table referenced by `entries[idx]`.
+    /// Intermediate tables always have PRESENT | WRITEABLE | USER flags.
+    fn get_or_alloc_child(&mut self, idx: usize) -> &mut PageTable {
+        if !self.entries[idx].get_flags().contains(PageFlags::PRESENT) {
+            let frame = unsafe {
+                FRAME_ALLOCATOR.lock().alloc_block(1)
+                    .expect("Out of frames for page table")
+            };
+            self.entries[idx].set(
+                frame,
+                PageFlags::PRESENT | PageFlags::WRITEABLE | PageFlags::USER,
+            );
+        }
+        let addr = self.entries[idx].get_addr();
+        unsafe { &mut *(addr.as_mut_ptr::<PageTable>()) }
+    }
+
+    /// Map `num_pages` pages starting at `virt_addr`.
+    /// If `kernel` is true, creates a 1:1 identity mapping (no frame allocation at leaf level).
+    /// If `kernel` is false, allocates fresh frames for each leaf page.
+    /// Page 0 (address 0x0) is always left not-present (null pointer guard).
+    /// Returns the number of pages mapped.
+    fn map(&mut self, virt_addr: u64, num_pages: usize, kernel: bool) -> usize {
+        let flags = if kernel { PageFlags::kernel_flags() } else { PageFlags::user_flags() };
+
+        for i in 0..num_pages {
+            let vaddr = virt_addr + (i as u64) * (PAGE_SIZE as u64);
+
+            let pml4_idx = ((vaddr >> 39) & 0x1FF) as usize;
+            let pdpt_idx = ((vaddr >> 30) & 0x1FF) as usize;
+            let pd_idx   = ((vaddr >> 21) & 0x1FF) as usize;
+            let pt_idx   = ((vaddr >> 12) & 0x1FF) as usize;
+
+            let pdpt = self.get_or_alloc_child(pml4_idx);
+            let pd   = pdpt.get_or_alloc_child(pdpt_idx);
+            let pt   = pd.get_or_alloc_child(pd_idx);
+
+            if vaddr == 0 {
+                pt.entries[pt_idx] = PageTableEntry(0);
+            } else if kernel {
+                pt.entries[pt_idx].set(PhysAddr::new(vaddr), flags);
+            } else {
+                let frame = unsafe {
+                    FRAME_ALLOCATOR.lock().alloc_block(1)
+                        .expect("Out of frames for user page")
+                };
+                pt.entries[pt_idx].set(frame, flags);
+            }
+        }
+        num_pages
+    }
+}
+
+pub fn read_cr3() -> &'static mut PageTable {
+    let value: u64;
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) value);
+    }
+
+    unsafe {
+        PhysAddr::new(value & 0xffff_ffff_ffff_f000)
+            .as_mut_ptr::<PageTable>()
+            .as_mut()
+            .unwrap()
+    }
+}
+
+pub unsafe fn write_cr3(pml4: &PageTable) {
+    let addr: u64 = ptr::from_ref(pml4) as u64;
+    unsafe {
+        core::arch::asm!("mov cr3, {}", in(reg) addr);
+    }
+}
+
+pub unsafe fn write_cr3_raw(pml4_addr: u64) {
+    unsafe {
+        core::arch::asm!("mov cr3, {}", in(reg) pml4_addr);
+    }
+}
+
+/// Create a new PML4 with the entire physical address space identity-mapped.
+/// Page 0 is not-present to catch null pointer dereferences.
+pub fn init_kernel_tables() -> &'static mut PageTable {
+    let max_phys_addr = FRAME_ALLOCATOR.lock().get_max_phys_addr();
+    let num_pages = (max_phys_addr.raw() as usize + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    unsafe {
+        let pml4 = FRAME_ALLOCATOR.lock()
+                .alloc_block(1)
+                .expect("Failed to allocate frame for PML4!")
+                .as_mut_ptr::<PageTable>()
+                .as_mut()
+                .unwrap();
+
+        pml4.map(0, num_pages, true);
+        pml4
+    }
+}
+
+/// Map a user stack into the given PML4 and return the stack top pointer.
+/// The stack occupies USER_STACK_VIRT_START..USER_STACK_VIRT_END.
+/// Physical frames are allocated by the frame allocator.
+pub unsafe fn map_user_stack(pml4_table: &mut PageTable) -> *mut u8 {
+    let num_pages = STACK_SIZE / PAGE_SIZE;
+    pml4_table.map(USER_STACK_VIRT_START as u64, num_pages, false);
+    USER_STACK_VIRT_END as *mut u8
+}

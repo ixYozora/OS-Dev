@@ -12,3 +12,4 @@ path = "src/startup.rs"
 spin = "0.10.0"
 x86_64 = "0.15.2"
 nolock = { version = "0.4.1", default-features = false, features = ["queues"] }
+bitflags = "2.11.0"

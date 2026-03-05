@@ -15,9 +15,10 @@ use core::sync::atomic::AtomicUsize;
 use core::{fmt, ptr};
 
 use crate::consts;
-use crate::consts::STACK_SIZE;
+use crate::consts::{STACK_SIZE, USER_STACK_VIRT_START, USER_STACK_VIRT_END};
 use crate::devices::pit;
 use crate::kernel::cpu;
+use crate::kernel::paging::pages;
 use crate::kernel::syscalls::user_api::usr_thread_exit;
 use crate::kernel::threads::scheduler::get_scheduler;
 
@@ -59,13 +60,15 @@ unsafe extern "C" fn thread_start(stack_ptr: usize) {
     }
 }
 
-/// Context switch: save current context, restore next, update TSS rsp0.
-/// `next_stack_end` (rdx) is the top of the next thread's kernel stack for TSS.
+/// Context switch: save current context, restore next, switch address space, update TSS rsp0.
+/// Parameters: rdi = &current.stack_ptr, rsi = next.stack_ptr,
+///             rdx = next kernel stack end, rcx = next PML4 physical address
 #[naked]
 unsafe extern "C" fn thread_switch(
     current_stack_ptr: *mut usize,
     next_stack: usize,
     next_stack_end: usize,
+    next_pml4: u64,
 ) {
     unsafe {
         naked_asm!(
@@ -87,6 +90,7 @@ unsafe extern "C" fn thread_switch(
             "pushf",
             "mov [rdi], rsp",
             "mov rsp, rsi",
+            "mov cr3, rcx",
             "mov rdi, rdx",
             "call _tss_set_rsp0",
             "call unlock_scheduler",
@@ -136,6 +140,7 @@ pub struct Thread {
     stack_ptr: usize,
     entry: fn(),
     is_kernel_thread: bool,
+    pml4_addr: u64,
 }
 
 fn allocate_stack() -> Vec<u64> {
@@ -148,6 +153,9 @@ fn allocate_stack() -> Vec<u64> {
 
 impl Thread {
     pub fn new_kernel_thread(entry: fn()) -> Box<Thread> {
+        let pml4 = pages::init_kernel_tables();
+        let pml4_addr = ptr::from_ref(pml4) as u64;
+
         let kernel_stack = allocate_stack();
         let user_stack = allocate_stack();
         let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
@@ -159,6 +167,7 @@ impl Thread {
             stack_ptr,
             entry,
             is_kernel_thread: true,
+            pml4_addr,
         });
 
         thread.prepare_kernel_stack(Thread::kickoff_kernel_thread as u64);
@@ -166,8 +175,22 @@ impl Thread {
     }
 
     pub fn new_user_thread(entry: fn()) -> Box<Thread> {
+        let pml4 = pages::init_kernel_tables();
+        let pml4_addr = ptr::from_ref(pml4) as u64;
+
+        // Map user stack at the fixed virtual address in this thread's address space
+        unsafe { pages::map_user_stack(pml4); }
+
+        // Wrap the virtual address range as a Vec (no actual heap allocation)
+        let user_stack = unsafe {
+            Vec::from_raw_parts(
+                USER_STACK_VIRT_START as *mut u64,
+                STACK_SIZE / 8,
+                STACK_SIZE / 8,
+            )
+        };
+
         let kernel_stack = allocate_stack();
-        let user_stack = allocate_stack();
         let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
 
         let mut thread = Box::new(Thread {
@@ -177,6 +200,7 @@ impl Thread {
             stack_ptr,
             entry,
             is_kernel_thread: false,
+            pml4_addr,
         });
 
         thread.prepare_kernel_stack(Thread::kickoff_user_thread as u64);
@@ -185,6 +209,7 @@ impl Thread {
 
     pub fn start(&mut self) {
         unsafe {
+            pages::write_cr3_raw(self.pml4_addr);
             thread_start(self.stack_ptr);
         }
     }
@@ -195,10 +220,12 @@ impl Thread {
                 panic!("No Thread!");
             }
             let next_stack_end = (*next).get_kernel_stack_end();
+            let next_pml4 = (*next).pml4_addr;
             thread_switch(
                 &mut (*current).stack_ptr,
                 (*next).stack_ptr,
                 next_stack_end,
+                next_pml4,
             );
         }
     }
@@ -213,17 +240,19 @@ impl Thread {
     }
 
     fn get_user_stack_end(&self) -> usize {
-        let cap = self.user_stack.capacity();
-        ptr::from_ref(&self.user_stack[cap - 1]) as usize + 8
+        if self.is_kernel_thread {
+            let cap = self.user_stack.capacity();
+            ptr::from_ref(&self.user_stack[cap - 1]) as usize + 8
+        } else {
+            USER_STACK_VIRT_END
+        }
     }
 
-    /// Prepare the kernel stack so that thread_start / thread_switch can
-    /// pop the saved context and `ret` into the given kickoff function.
     fn prepare_kernel_stack(&mut self, kickoff: u64) {
         let thread = ptr::from_mut(self) as u64;
         let length = self.kernel_stack.len();
 
-        self.kernel_stack[length - 1] = 0x131155; // Dummy return address
+        self.kernel_stack[length - 1] = 0x131155;
         self.kernel_stack[length - 2] = kickoff;
         self.kernel_stack[length - 3] = 0; // r8
         self.kernel_stack[length - 4] = 0; // r9
@@ -245,8 +274,6 @@ impl Thread {
         self.stack_ptr = self.stack_ptr - (consts::STACK_ENTRY_SIZE * 17);
     }
 
-    /// Kickoff for kernel threads (Ring 0). Sets TSS rsp0, enables interrupts,
-    /// calls the entry function, then exits via the scheduler.
     fn kickoff_kernel_thread(&self) {
         let stack_end = self.get_kernel_stack_end();
         unsafe {
@@ -257,9 +284,6 @@ impl Thread {
         get_scheduler().exit();
     }
 
-    /// Kickoff for user threads. Sets TSS rsp0, pushes a trampoline return
-    /// address onto the user stack (so `ret` from entry calls `usr_thread_exit`),
-    /// then switches to Ring 3 via iretq.
     fn kickoff_user_thread(&self) {
         let stack_end = self.get_kernel_stack_end();
         unsafe {
@@ -267,8 +291,6 @@ impl Thread {
         }
         let user_stack = self.get_user_stack_end();
 
-        // Place trampoline address at top of user stack so that when the
-        // entry function returns, it lands in user_thread_exit_trampoline.
         let user_sp = user_stack - 8;
         unsafe {
             *(user_sp as *mut usize) = user_thread_exit_trampoline as usize;
@@ -277,7 +299,6 @@ impl Thread {
     }
 }
 
-/// Trampoline that runs in Ring 3 after a user entry function returns.
 fn user_thread_exit_trampoline() {
     usr_thread_exit();
 }

@@ -73,6 +73,11 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
     allocator::init();
     kprintln!("Initializing allocator");
 
+    kprintln!("Initializing kernel page tables");
+    let kernel_pml4 = kernel::paging::pages::init_kernel_tables();
+    unsafe { kernel::paging::pages::write_cr3(kernel_pml4); }
+    kprintln!("Kernel page tables active");
+
     kprintln!("Initializing PIC");
     pic::PIC.lock().init();
 
@@ -125,7 +130,7 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
             }
             FramebufferType::Text => {
                 cga::CGA.lock().clear();
-                user::aufgabe9::syscall_demo::syscall_test();
+                user::aufgabe11::paging_demo::paging_test();
             }
         }
     } else {
