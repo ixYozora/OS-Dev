@@ -9,3 +9,5 @@ pub mod threads;
 
 pub mod multiboot;
 
+pub mod syscalls;
+

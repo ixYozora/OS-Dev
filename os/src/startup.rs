@@ -79,6 +79,9 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
     kprintln!("Initializing PIT");
     pit::plugin();
 
+    kprintln!("Initializing fast syscalls (syscall/sysret)");
+    kernel::syscalls::syscall_dispatcher::init_fast_syscalls();
+
     kprintln!("Boot sequence finished");
 
     kprintln!("Scanning PCI bus");
@@ -112,9 +115,7 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
             }
             FramebufferType::Text => {
                 cga::CGA.lock().clear();
-                user::aufgabe8::user_threads::run();
-                let scheduler = get_scheduler();
-                scheduler.schedule();
+                user::aufgabe9::syscall_demo::syscall_test();
             }
         }
     } else {
