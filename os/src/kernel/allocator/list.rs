@@ -64,15 +64,22 @@ impl LinkedListAllocator {
 
     /// Initialize the allocator with the heap bounds given in the constructor.
     pub unsafe fn init(&mut self) {
-
-        /* Hier muss Code eingefuegt werden */
         let start = self.heap_start;
         let size = self.heap_end - self.heap_start;
         self.head.next = None;
         unsafe {
             self.add_free_block(start, size);
         }
+    }
 
+    /// Initialize the allocator with a dynamically-determined heap region.
+    pub unsafe fn init_at(&mut self, start: usize, size: usize) {
+        self.heap_start = start;
+        self.heap_end = start + size;
+        self.head.next = None;
+        unsafe {
+            self.add_free_block(start, size);
+        }
     }
 
     /// Adds the given free memory block 'addr' to the front of the free list.
