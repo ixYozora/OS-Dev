@@ -60,6 +60,16 @@ use crate::kernel::threads::thread::Thread;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
+    // Copy multiboot info to stack — the original lies in physical memory
+    // that may be reused by the page frame allocator
+    let multiboot_info = *multiboot_info;
+
+    kprintln!("Initializing physical memory allocator");
+    multiboot_info.init_phys_memory_allocator();
+
+    kprintln!("Testing page frame allocator");
+    kernel::paging::frames::test_frame_allocator();
+
     allocator::init();
     kprintln!("Initializing allocator");
 
@@ -78,6 +88,9 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
 
     kprintln!("Initializing PIT");
     pit::plugin();
+
+    kprintln!("Initializing fast syscalls (syscall/sysret)");
+    kernel::syscalls::syscall_dispatcher::init_fast_syscalls();
 
     kprintln!("Boot sequence finished");
 
@@ -112,9 +125,7 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
             }
             FramebufferType::Text => {
                 cga::CGA.lock().clear();
-                user::aufgabe8::user_threads::run();
-                let scheduler = get_scheduler();
-                scheduler.schedule();
+                user::aufgabe9::syscall_demo::syscall_test();
             }
         }
     } else {

@@ -3,6 +3,7 @@ use core::ptr;
 use spin::once::Once;
 use crate::kernel::interrupts::intdispatcher::int_disp;
 use crate::kernel::interrupts::InterruptStackFrame;
+use crate::kernel::syscalls::syscall_dispatcher::syscall_disp;
 
 /// Static instance of the Interrupt Descriptor Table (IDT).
 /// Wrapped inside a Once, because Idt::new() is not const.
@@ -55,36 +56,42 @@ impl IdtDescriptor {
 }
 
 impl IdtEntry {
-    /// Create a new IDT entry for an interrupt handler at the given offset.
-    /// Each entry has the same selector and options:
-    /// The selector is the second entry in the GDT (kernel code segment) -> 2 * 8 = 16.
-    /// The options are always 'Present', 'DPL=0' and '64-bit interrupt gate'.
-    const fn new(offset: u64) -> IdtEntry {
-
-        /* Hier muss Code eingefuegt werden */
-        return IdtEntry {
-            offset_low: (offset & 0xFFFF) as u16, // Lower 16 bits of the offset
+    /// Create an interrupt gate entry (DPL=0, type=0xE, clears IF on entry).
+    const fn new_interrupt_gate(offset: u64) -> IdtEntry {
+        IdtEntry {
+            offset_low: (offset & 0xFFFF) as u16,
             selector: 16, // Kernel code segment selector (GDT entry 2)
             options: 0b1000_1110_00000000, // Present, DPL=0, 64-bit interrupt gate
-            offset_mid: ((offset >> 16) & 0xFFFF) as u16, // Middle 16 bits of the offset
-            offset_high: ((offset >> 32) & 0xFFFFFFFF) as u32, // Upper 32 bits of the offset
-            reserved: 0 // Reserved field, set to zero
-        };
-
+            offset_mid: ((offset >> 16) & 0xFFFF) as u16,
+            offset_high: ((offset >> 32) & 0xFFFFFFFF) as u32,
+            reserved: 0,
+        }
     }
 
-    /// Create a new IDT entry for an interrupt handler function.
-    /// The function must be marked as 'extern "x86-interrupt"'.
+    /// Create a trap gate entry (DPL=3, type=0xF, leaves IF unchanged).
+    /// Callable from Ring 3 via software interrupt.
+    const fn new_trap_gate(offset: u64) -> IdtEntry {
+        IdtEntry {
+            offset_low: (offset & 0xFFFF) as u16,
+            selector: 16, // Kernel code segment selector (GDT entry 2)
+            options: 0b1110_1111_00000000, // Present, DPL=3, 64-bit trap gate
+            offset_mid: ((offset >> 16) & 0xFFFF) as u16,
+            offset_high: ((offset >> 32) & 0xFFFFFFFF) as u32,
+            reserved: 0,
+        }
+    }
+
     pub fn without_error_code(handler: extern "x86-interrupt" fn(InterruptStackFrame)) -> IdtEntry {
-        IdtEntry::new(handler as u64)
+        IdtEntry::new_interrupt_gate(handler as u64)
     }
 
-    /// Create a new IDT entry for an interrupt handler function with an error code.
-    /// The function must be marked as 'extern "x86-interrupt"'.
-    /// This is only used for some CPU exceptions (e.g. Page Faults).
-    /// See the OSDev wiki for a full list of exceptions: https://wiki.osdev.org/Exceptions
     pub fn with_error_code(handler: extern "x86-interrupt" fn(InterruptStackFrame, error_code: u64)) -> IdtEntry {
-        IdtEntry::new(handler as u64)
+        IdtEntry::new_interrupt_gate(handler as u64)
+    }
+
+    /// Create a trap gate IDT entry for a naked syscall dispatcher function.
+    pub fn syscall_gate(handler: extern "C" fn()) -> IdtEntry {
+        IdtEntry::new_trap_gate(handler as u64)
     }
 }
 
@@ -250,7 +257,7 @@ impl Idt {
                 interrupt_handler!(0x7d, int_disp),
                 interrupt_handler!(0x7e, int_disp),
                 interrupt_handler!(0x7f, int_disp),
-                interrupt_handler!(0x80, int_disp),
+                IdtEntry::syscall_gate(syscall_disp),
                 interrupt_handler!(0x81, int_disp),
                 interrupt_handler!(0x82, int_disp),
                 interrupt_handler!(0x83, int_disp),

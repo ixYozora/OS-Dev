@@ -43,6 +43,7 @@ pagetable_end:  equ 0x200000      ;  = 2 MB
 [GLOBAL idt]
 [GLOBAL _tss_set_base_address]
 [GLOBAL _tss_set_rsp0]
+[GLOBAL _kernel_rsp0]
 
 ; C-Funktion die am Ende des Assembler-Codes aufgerufen werden
 [EXTERN startup]
@@ -272,6 +273,7 @@ _tss_set_base_address:
 ;
 _tss_set_rsp0:
 	mov    [_tss + 4], rdi
+	mov    [_kernel_rsp0], rdi
 	ret
 
 ;
@@ -321,17 +323,19 @@ gdt:
 	dw  0x9200    ; data read/write
 	dw  0x00CF    ; granularity=4096, 386 (+5th nibble of limit)
 
-	; 64-Bit User-Codesegment-Deskriptor (Selektor 0x20, Ring 3)
-	dw  0xFFFF
-	dw  0x0000
-	dw  0xFA00    ; P=1, DPL=3, S=1, Type=1010 (code exec/read)
-	dw  0x00AF    ; Long-Mode
-
-	; User-Datensegment-Deskriptor (Selektor 0x28, Ring 3)
+	; User-Datensegment-Deskriptor (Selektor 0x20, Ring 3)
+	; Placed before User Code for syscall/sysret compatibility:
+	; sysret CS = STAR[63:48]+16 = 0x28, SS = STAR[63:48]+8 = 0x20
 	dw  0xFFFF
 	dw  0x0000
 	dw  0xF200    ; P=1, DPL=3, S=1, Type=0010 (data read/write)
 	dw  0x00CF
+
+	; 64-Bit User-Codesegment-Deskriptor (Selektor 0x28, Ring 3)
+	dw  0xFFFF
+	dw  0x0000
+	dw  0xFA00    ; P=1, DPL=3, S=1, Type=1010 (code exec/read)
+	dw  0x00AF    ; Long-Mode
 
 	; TSS-Deskriptor (Selektor 0x30, doppelte Groesse = 16 Bytes)
 _tss_descriptor:
@@ -349,6 +353,10 @@ gdt_80:
 	dq  gdt                 ; Adresse der GDT
 
 multiboot_info_address:
+	dq  0
+
+; Cached copy of TSS RSP0 for fast syscall entry (avoids offset into TSS struct)
+_kernel_rsp0:
 	dq  0
 
 ; Task State Segment (104 Bytes, ohne IO-Bitmap)

@@ -9,3 +9,7 @@ pub mod threads;
 
 pub mod multiboot;
 
+pub mod paging;
+
+pub mod syscalls;
+

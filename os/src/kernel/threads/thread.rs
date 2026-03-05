@@ -18,6 +18,7 @@ use crate::consts;
 use crate::consts::STACK_SIZE;
 use crate::devices::pit;
 use crate::kernel::cpu;
+use crate::kernel::syscalls::user_api::usr_thread_exit;
 use crate::kernel::threads::scheduler::get_scheduler;
 
 unsafe extern "C" {
@@ -116,11 +117,11 @@ unsafe extern "C" fn thread_switch(
 unsafe extern "C" fn thread_user_start(entry: usize, user_stack: usize) {
     unsafe {
         naked_asm!(
-            "push 0x2B",                    // SS: user data selector | RPL 3
+            "push 0x23",                    // SS: user data selector 0x20 | RPL 3
             "push rsi",                      // RSP: user stack pointer
             "pushf",                         // RFLAGS
             "or qword ptr [rsp], 0x200",     // set IF (bit 9) for user mode
-            "push 0x23",                    // CS: user code selector | RPL 3
+            "push 0x2B",                    // CS: user code selector 0x28 | RPL 3
             "push rdi",                      // RIP: entry function
             "iretq",
         )
@@ -256,18 +257,29 @@ impl Thread {
         get_scheduler().exit();
     }
 
-    /// Kickoff for user threads. Sets TSS rsp0, then switches to Ring 3
-    /// via iretq. The entry function runs entirely in user mode.
+    /// Kickoff for user threads. Sets TSS rsp0, pushes a trampoline return
+    /// address onto the user stack (so `ret` from entry calls `usr_thread_exit`),
+    /// then switches to Ring 3 via iretq.
     fn kickoff_user_thread(&self) {
         let stack_end = self.get_kernel_stack_end();
         unsafe {
             _tss_set_rsp0(stack_end);
         }
         let user_stack = self.get_user_stack_end();
+
+        // Place trampoline address at top of user stack so that when the
+        // entry function returns, it lands in user_thread_exit_trampoline.
+        let user_sp = user_stack - 8;
         unsafe {
-            thread_user_start(self.entry as usize, user_stack);
+            *(user_sp as *mut usize) = user_thread_exit_trampoline as usize;
+            thread_user_start(self.entry as usize, user_sp);
         }
     }
+}
+
+/// Trampoline that runs in Ring 3 after a user entry function returns.
+fn user_thread_exit_trampoline() {
+    usr_thread_exit();
 }
 
 pub fn sleep_ms(ms: usize) {
