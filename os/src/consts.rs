@@ -10,6 +10,9 @@ pub const PAGE_FRAME_SIZE: usize = 4096;            // 4 KiB page frames
 /// Size of a virtual page (4 KiB)
 pub const PAGE_SIZE: usize = 0x1000;
 
+/// Start address of the user code in virtual memory (1 TiB)
+pub const USER_CODE_VIRT_START: usize = 0x100_0000_0000;
+
 /// Start address of the user stack in virtual memory (64 TiB)
 pub const USER_STACK_VIRT_START:usize = 0x4000_0000_0000;
 /// End address of the user stack in virtual memory

@@ -15,6 +15,7 @@ use core::sync::atomic::{AtomicBool, AtomicUsize};
 use spin::{Mutex, Once};
 use crate::kernel::{allocator, cpu};
 use crate::kernel::cpu::enable_int_nested;
+use crate::kernel::processes::process::{self, Process};
 use crate::kernel::threads::idle_thread::idle_thread;
 use crate::kernel::threads::thread;
 use crate::kernel::threads::thread::Thread;
@@ -74,8 +75,25 @@ impl Scheduler {
     /// Get the ID of the currently active thread.
     pub fn get_active_tid(&self) -> usize {
         let state = self.state.lock();
-
         state.active_thread.as_ref().unwrap().get_id()
+    }
+
+    /// Get the process ID of the currently active thread.
+    pub fn get_active_pid(&self) -> usize {
+        let state = self.state.lock();
+        state.active_thread.as_ref().unwrap().get_pid()
+    }
+
+    /// Spawn a new process: create a Process, a user thread, and register both.
+    pub fn spawn_process(&self, app_name: &str) {
+        let proc = Process::new(app_name);
+        let pid = proc.get_id();
+        process::add_process(proc);
+
+        let mut thread = Thread::new_user_thread(app_name);
+        thread.set_pid(pid);
+
+        self.ready(thread);
     }
 
     /// Start the scheduler.
@@ -101,13 +119,17 @@ impl Scheduler {
     }
 
     /// Terminate the current (calling) thread and switch to the next one.
+    /// Also removes the associated process from the process table.
     pub fn exit(&self) {
         let mut state = self.state.lock();
 
         let mut current = state.active_thread.take().unwrap();
+        let pid = current.get_pid();
+        if pid != 0 {
+            process::remove_process(pid);
+        }
 
         let next = state.ready_queue.dequeue().unwrap();
-
         state.active_thread = Some(next);
 
         unsafe {

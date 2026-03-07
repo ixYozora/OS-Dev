@@ -53,6 +53,6 @@ pub fn run() {
     let kt = Thread::new_kernel_thread(kernel_thread_entry);
     scheduler.ready(kt);
 
-    let ut = Thread::new_user_thread(user_thread_entry);
+    let ut = Thread::new_user_thread("hello");
     scheduler.ready(ut);
 }

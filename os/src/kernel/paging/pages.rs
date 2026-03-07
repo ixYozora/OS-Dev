@@ -1,5 +1,5 @@
 use core::ptr;
-use crate::consts::{PAGE_SIZE, STACK_SIZE, USER_STACK_VIRT_END, USER_STACK_VIRT_START};
+use crate::consts::{PAGE_SIZE, STACK_SIZE, USER_CODE_VIRT_START, USER_STACK_VIRT_END, USER_STACK_VIRT_START};
 use crate::kernel::paging::frames::{PhysAddr, FRAME_ALLOCATOR};
 
 const PAGE_TABLE_ENTRIES: usize = 512;
@@ -21,7 +21,7 @@ bitflags::bitflags! {
 
 impl PageFlags {
     fn kernel_flags() -> Self {
-        Self::PRESENT | Self::WRITEABLE | Self::USER
+        Self::PRESENT | Self::WRITEABLE
     }
 
     fn user_flags() -> Self {
@@ -183,4 +183,42 @@ pub unsafe fn map_user_stack(pml4_table: &mut PageTable) -> *mut u8 {
     let num_pages = STACK_SIZE / PAGE_SIZE;
     pml4_table.map(USER_STACK_VIRT_START as u64, num_pages, false);
     USER_STACK_VIRT_END as *mut u8
+}
+
+/// Map a user application binary into the given PML4 at USER_CODE_VIRT_START.
+/// Allocates physical frames, copies the app data, and creates the virtual mapping.
+pub unsafe fn map_user_app(pml4_table: &mut PageTable, app_data: &[u8]) {
+    let num_pages = (app_data.len() + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    let phys_base = {
+        FRAME_ALLOCATOR.lock().alloc_block(num_pages)
+            .expect("Out of frames for user app")
+    };
+
+    unsafe {
+        let dest = phys_base.as_mut_ptr::<u8>();
+        core::ptr::copy_nonoverlapping(app_data.as_ptr(), dest, app_data.len());
+        let remaining = num_pages * PAGE_SIZE - app_data.len();
+        if remaining > 0 {
+            core::ptr::write_bytes(dest.add(app_data.len()), 0, remaining);
+        }
+    }
+
+    let virt_start = USER_CODE_VIRT_START as u64;
+    let flags = PageFlags::user_flags();
+    for i in 0..num_pages {
+        let vaddr = virt_start + (i as u64) * (PAGE_SIZE as u64);
+        let paddr = PhysAddr::new(phys_base.raw() + (i as u64) * (PAGE_SIZE as u64));
+
+        let pml4_idx = ((vaddr >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((vaddr >> 30) & 0x1FF) as usize;
+        let pd_idx   = ((vaddr >> 21) & 0x1FF) as usize;
+        let pt_idx   = ((vaddr >> 12) & 0x1FF) as usize;
+
+        let pdpt = pml4_table.get_or_alloc_child(pml4_idx);
+        let pd   = pdpt.get_or_alloc_child(pdpt_idx);
+        let pt   = pd.get_or_alloc_child(pd_idx);
+
+        pt.entries[pt_idx].set(paddr, flags);
+    }
 }

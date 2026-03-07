@@ -14,7 +14,6 @@
 #![allow(unused_imports)]
 #![allow(unused_macros)]
 #![feature(abi_x86_interrupt)]
-#![feature(naked_functions)]
 
 extern crate alloc;
 extern crate spin; // we need a mutex in devices::cga_print
@@ -50,8 +49,7 @@ use kernel::interrupts::pic;
 use kernel::interrupts::intdispatcher;
 use kernel::interrupts::intdispatcher::INT_VECTORS;
 use crate::cpu::IoPort;
-use crate::kernel::multiboot::FramebufferType;
-use crate::kernel::multiboot::MultibootInfo;
+use crate::kernel::multiboot::{FramebufferType, MultibootInfo, MULTIBOOT_INFO};
 use crate::devices::pci::get_pci_bus;
 use crate::devices::lfb::init_lfb;
 use crate::devices::pci::Command;
@@ -60,9 +58,8 @@ use crate::kernel::threads::thread::Thread;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
-    // Copy multiboot info to stack — the original lies in physical memory
-    // that may be reused by the page frame allocator
     let multiboot_info = *multiboot_info;
+    MULTIBOOT_INFO.call_once(|| multiboot_info);
 
     kprintln!("Initializing physical memory allocator");
     multiboot_info.init_phys_memory_allocator();

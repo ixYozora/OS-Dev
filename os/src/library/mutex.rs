@@ -8,7 +8,7 @@ use crate::kernel::cpu;
 use crate::kernel::threads::scheduler::{get_scheduler, SCHEDULER_ACTIVE};
 use crate::kernel::threads::thread::Thread;
 use crate::library::queue::LinkedQueue;
-use crate::library::spinlock::Spinlock;
+use usrlib::spinlock::Spinlock;
 
 /// A more sophisticated lock implementation than `Spinlock`, that blocks waiting threads
 /// when the lock is already held. This improves performance, as no time is wasted by threads

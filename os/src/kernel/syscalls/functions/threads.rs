@@ -11,3 +11,7 @@ pub extern "C" fn sys_thread_exit() {
 pub extern "C" fn sys_thread_get_id() -> u64 {
     get_scheduler().get_active_tid() as u64
 }
+
+pub extern "C" fn sys_get_process_id() -> u64 {
+    get_scheduler().get_active_pid() as u64
+}
