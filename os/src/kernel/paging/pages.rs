@@ -176,13 +176,30 @@ pub fn init_kernel_tables() -> &'static mut PageTable {
     }
 }
 
-/// Map a user stack into the given PML4 and return the stack top pointer.
-/// The stack occupies USER_STACK_VIRT_START..USER_STACK_VIRT_END.
-/// Physical frames are allocated by the frame allocator.
+/// Map the top page of the user stack into the given PML4 and return the stack top pointer.
+/// Only the topmost page is initially mapped; additional pages are allocated on demand
+/// by the page fault handler when the stack grows beyond one page.
+/// The VMA still covers the full USER_STACK_VIRT_START..USER_STACK_VIRT_END range.
 pub unsafe fn map_user_stack(pml4_table: &mut PageTable) -> *mut u8 {
-    let num_pages = STACK_SIZE / PAGE_SIZE;
-    pml4_table.map(USER_STACK_VIRT_START as u64, num_pages, false);
+    let top_page_start = (USER_STACK_VIRT_END - PAGE_SIZE) as u64;
+    pml4_table.map(top_page_start, 1, false);
     USER_STACK_VIRT_END as *mut u8
+}
+
+/// Check if a page fault address falls within the user stack VMA and grow if needed.
+/// Returns true if the stack was successfully grown, false otherwise.
+pub fn check_and_grow_user_stack(fault_addr: u64) -> bool {
+    let stack_start = USER_STACK_VIRT_START as u64;
+    let stack_end = USER_STACK_VIRT_END as u64;
+
+    if fault_addr < stack_start || fault_addr >= stack_end {
+        return false;
+    }
+
+    let page_start = fault_addr & !(PAGE_SIZE as u64 - 1);
+    let pml4 = read_cr3();
+    pml4.map(page_start, 1, false);
+    true
 }
 
 /// Map a user application binary into the given PML4 at USER_CODE_VIRT_START.
@@ -221,4 +238,10 @@ pub unsafe fn map_user_app(pml4_table: &mut PageTable, app_data: &[u8]) {
 
         pt.entries[pt_idx].set(paddr, flags);
     }
+}
+
+/// Map a user heap region into the given PML4.
+/// Allocates physical frames and maps them with user flags at the given virtual address.
+pub unsafe fn map_user_heap(pml4_table: &mut PageTable, heap_start: u64, num_pages: usize) {
+    pml4_table.map(heap_start, num_pages, false);
 }

@@ -24,6 +24,8 @@ pub enum SyscallFunction {
     Print,
     GetChar,
     GetProcessId,
+    DumpVmas,
+    MapHeap,
     NumSyscalls,
 }
 
@@ -62,6 +64,14 @@ pub fn usr_get_char() -> char {
 
 pub fn usr_get_process_id() -> usize {
     syscall0(SyscallFunction::GetProcessId) as usize
+}
+
+pub fn usr_dump_vmas() {
+    syscall0(SyscallFunction::DumpVmas);
+}
+
+pub fn usr_map_heap(user_heap_start: u64, user_heap_size: usize) {
+    syscall2(SyscallFunction::MapHeap, user_heap_start, user_heap_size as u64);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +158,14 @@ pub fn fast_usr_get_char() -> char {
 
 pub fn fast_usr_get_process_id() -> usize {
     fast_syscall0(SyscallFunction::GetProcessId) as usize
+}
+
+pub fn fast_usr_dump_vmas() {
+    fast_syscall0(SyscallFunction::DumpVmas);
+}
+
+pub fn fast_usr_map_heap(user_heap_start: u64, user_heap_size: usize) {
+    fast_syscall2(SyscallFunction::MapHeap, user_heap_start, user_heap_size as u64);
 }
 
 #[inline(always)]
