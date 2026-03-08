@@ -89,14 +89,8 @@ impl Scheduler {
 
     /// Spawn a new process: create a Process, a user thread, and register both.
     /// Also creates initial VMAs for Code and Stack regions.
-    pub fn spawn_process(&self, app_name: &str) {
-        let proc = Process::new(app_name);
-        let pid = proc.get_id();
-        process::add_process(proc);
-
-        let mut thread = Thread::new_user_thread(app_name);
-        thread.set_pid(pid);
-
+    /// Spawn a new process. Returns the PID on success, or 0 if the app was not found.
+    pub fn spawn_process(&self, app_name: &str) -> usize {
         let app_size = {
             let multiboot = MULTIBOOT_INFO.get().expect("Multiboot info not available");
             let archive = multiboot.get_initrd_archive().expect("No initrd archive found");
@@ -112,6 +106,17 @@ impl Scheduler {
             size
         };
 
+        if app_size == 0 {
+            return 0;
+        }
+
+        let proc = Process::new(app_name);
+        let pid = proc.get_id();
+        process::add_process(proc);
+
+        let mut thread = Thread::new_user_thread(app_name);
+        thread.set_pid(pid);
+
         let code_end = USER_CODE_VIRT_START as u64
             + ((app_size + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE) as u64;
         let code_vma = VMA::new(USER_CODE_VIRT_START as u64, code_end, VmaType::Code);
@@ -121,6 +126,7 @@ impl Scheduler {
         process::add_vma(pid, stack_vma).expect("Failed to add Stack VMA");
 
         self.ready(thread);
+        pid
     }
 
     /// Start the scheduler.

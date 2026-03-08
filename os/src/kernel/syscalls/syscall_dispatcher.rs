@@ -9,8 +9,8 @@
 
 use core::arch::{asm, naked_asm};
 use crate::kernel::syscalls::functions::hello::sys_hello_world;
-use crate::kernel::syscalls::functions::threads::{sys_thread_yield, sys_thread_exit, sys_thread_get_id, sys_get_process_id};
-use crate::kernel::syscalls::functions::io::{sys_get_system_time, sys_print, sys_get_char};
+use crate::kernel::syscalls::functions::threads::{sys_thread_yield, sys_thread_exit, sys_thread_get_id, sys_get_process_id, sys_spawn_process, sys_wait_pid};
+use crate::kernel::syscalls::functions::io::{sys_get_system_time, sys_print, sys_get_char, sys_set_color, sys_buff_clear, sys_get_key};
 use crate::kernel::syscalls::functions::memory::{sys_dump_vmas, sys_map_heap};
 use usrlib::user_api::SyscallFunction;
 
@@ -42,6 +42,11 @@ impl SyscallFunctionTable {
                 sys_get_process_id as *const u64,
                 sys_dump_vmas as *const u64,
                 sys_map_heap as *const u64,
+                sys_spawn_process as *const u64,
+                sys_wait_pid as *const u64,
+                sys_set_color as *const u64,
+                sys_buff_clear as *const u64,
+                sys_get_key as *const u64,
             ],
         }
     }

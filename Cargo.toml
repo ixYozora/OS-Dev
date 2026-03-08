@@ -3,5 +3,8 @@ resolver = "2"
 
 members = [
     "os",
-    "apps/hello"
+    "apps/hello",
+    "apps/shell",
+    "apps/uptime_app",
+    "apps/vmatest",
 ]

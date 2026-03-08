@@ -1,6 +1,15 @@
 use core::ptr;
+use spin::Once;
 use crate::consts::{PAGE_SIZE, STACK_SIZE, USER_CODE_VIRT_START, USER_STACK_VIRT_END, USER_STACK_VIRT_START};
 use crate::kernel::paging::frames::{PhysAddr, FRAME_ALLOCATOR};
+
+static DEVICE_REGION: Once<(u64, usize)> = Once::new();
+
+/// Register a device MMIO region (e.g. LFB) that must be identity-mapped in every address space.
+/// Must be called before spawning any processes.
+pub fn register_device_region(phys_addr: u64, size: usize) {
+    DEVICE_REGION.call_once(|| (phys_addr, size));
+}
 
 const PAGE_TABLE_ENTRIES: usize = 512;
 
@@ -172,6 +181,14 @@ pub fn init_kernel_tables() -> &'static mut PageTable {
                 .unwrap();
 
         pml4.map(0, num_pages, true);
+
+        if let Some(&(addr, size)) = DEVICE_REGION.get() {
+            let aligned = addr & !(PAGE_SIZE as u64 - 1);
+            let end = addr + size as u64;
+            let dev_pages = ((end - aligned) as usize + PAGE_SIZE - 1) / PAGE_SIZE;
+            pml4.map(aligned, dev_pages, true);
+        }
+
         pml4
     }
 }
@@ -239,6 +256,7 @@ pub unsafe fn map_user_app(pml4_table: &mut PageTable, app_data: &[u8]) {
         pt.entries[pt_idx].set(paddr, flags);
     }
 }
+
 
 /// Map a user heap region into the given PML4.
 /// Allocates physical frames and maps them with user flags at the given virtual address.

@@ -71,9 +71,40 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
     kprintln!("Initializing allocator");
 
     kprintln!("Initializing kernel page tables");
+
+    if let Some(framebuffer_info) = multiboot_info.get_framebuffer_info() {
+        match framebuffer_info.typ {
+            FramebufferType::RGB => {
+                let lfb_size = framebuffer_info.pitch as usize * framebuffer_info.height as usize;
+                kernel::paging::pages::register_device_region(framebuffer_info.addr, lfb_size);
+            }
+            _ => {}
+        }
+    }
+
     let kernel_pml4 = kernel::paging::pages::init_kernel_tables();
     unsafe { kernel::paging::pages::write_cr3(kernel_pml4); }
     kprintln!("Kernel page tables active");
+
+    if let Some(framebuffer_info) = multiboot_info.get_framebuffer_info() {
+        match framebuffer_info.typ {
+            FramebufferType::Indexed => {
+                panic!("Color palette framebuffer not supported!");
+            }
+            FramebufferType::RGB => {
+                init_lfb(
+                    framebuffer_info.addr as *mut u8,
+                    framebuffer_info.pitch,
+                    framebuffer_info.width,
+                    framebuffer_info.height,
+                    framebuffer_info.bpp
+                );
+            }
+            FramebufferType::Text => {
+                cga::CGA.lock().clear();
+            }
+        }
+    }
 
     kprintln!("Initializing PIC");
     pic::PIC.lock().init();
@@ -101,39 +132,10 @@ pub extern "C" fn startup(multiboot_info: &MultibootInfo) {
         kprintln!("Found PCI device {:04x}:{:04x}", device.read_vendor_id(), device.read_device_id());
     }
 
-    if let Some(framebuffer_info) = multiboot_info.get_framebuffer_info() {
-        match framebuffer_info.typ {
-            FramebufferType::Indexed => {
-                panic!("Color palette framebuffer not supported!");
-            }
-            FramebufferType::RGB => {
-                init_lfb(
-                    framebuffer_info.addr as *mut u8,
-                    framebuffer_info.pitch,
-                    framebuffer_info.width,
-                    framebuffer_info.height,
-                    framebuffer_info.bpp
-                );
-
-                // Get scheduler
-                let scheduler = get_scheduler();
-
-                // Create shell thread
-                let shell_thread = Thread::new_kernel_thread(yozorashell::launch);
-                scheduler.ready(shell_thread);
-
-                // Start the scheduler: idle thread + shell thread + any future threads
-                scheduler.schedule();
-            }
-            FramebufferType::Text => {
-                cga::CGA.lock().clear();
-                user::aufgabe11::paging_demo::paging_test();
-            }
-        }
-    } else {
-       
-
-    }
+    kprintln!("Spawning user-space shell");
+    let scheduler = get_scheduler();
+    scheduler.spawn_process("shell");
+    scheduler.schedule();
 }
 
 

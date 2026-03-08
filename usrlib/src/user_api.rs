@@ -26,6 +26,11 @@ pub enum SyscallFunction {
     GetProcessId,
     DumpVmas,
     MapHeap,
+    SpawnProcess,
+    WaitPid,
+    SetColor,
+    BuffClear,
+    GetKey,
     NumSyscalls,
 }
 
@@ -72,6 +77,28 @@ pub fn usr_dump_vmas() {
 
 pub fn usr_map_heap(user_heap_start: u64, user_heap_size: usize) {
     syscall2(SyscallFunction::MapHeap, user_heap_start, user_heap_size as u64);
+}
+
+pub fn usr_spawn_process(name: &str) -> usize {
+    syscall2(SyscallFunction::SpawnProcess, name.as_ptr() as u64, name.len() as u64) as usize
+}
+
+pub fn usr_wait_pid(pid: usize) {
+    syscall1(SyscallFunction::WaitPid, pid as u64);
+}
+
+pub fn usr_set_color(color: u32) {
+    syscall1(SyscallFunction::SetColor, color as u64);
+}
+
+pub fn usr_buff_clear() {
+    syscall0(SyscallFunction::BuffClear);
+}
+
+/// Returns a packed key value: (scancode << 8) | ascii.
+/// scancode = 0 means no valid key was available.
+pub fn usr_get_key() -> u64 {
+    syscall0(SyscallFunction::GetKey)
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +193,26 @@ pub fn fast_usr_dump_vmas() {
 
 pub fn fast_usr_map_heap(user_heap_start: u64, user_heap_size: usize) {
     fast_syscall2(SyscallFunction::MapHeap, user_heap_start, user_heap_size as u64);
+}
+
+pub fn fast_usr_spawn_process(name: &str) -> usize {
+    fast_syscall2(SyscallFunction::SpawnProcess, name.as_ptr() as u64, name.len() as u64) as usize
+}
+
+pub fn fast_usr_wait_pid(pid: usize) {
+    fast_syscall1(SyscallFunction::WaitPid, pid as u64);
+}
+
+pub fn fast_usr_set_color(color: u32) {
+    fast_syscall1(SyscallFunction::SetColor, color as u64);
+}
+
+pub fn fast_usr_buff_clear() {
+    fast_syscall0(SyscallFunction::BuffClear);
+}
+
+pub fn fast_usr_get_key() -> u64 {
+    fast_syscall0(SyscallFunction::GetKey)
 }
 
 #[inline(always)]

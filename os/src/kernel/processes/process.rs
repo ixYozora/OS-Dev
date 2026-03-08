@@ -38,6 +38,10 @@ pub fn get_app_name(process_id: usize) -> Option<String> {
     PROCESSES.lock().get(&process_id).map(|p| p.name.clone())
 }
 
+pub fn process_exists(process_id: usize) -> bool {
+    PROCESSES.lock().contains_key(&process_id)
+}
+
 pub fn add_vma(process_id: usize, vma: VMA) -> Result<(), &'static str> {
     let mut procs = PROCESSES.lock();
     let process = procs.get_mut(&process_id).ok_or("Process not found")?;
