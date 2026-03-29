@@ -13,3 +13,5 @@ pub mod paging;
 
 pub mod syscalls;
 
+pub mod processes;
+

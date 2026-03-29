@@ -1,11 +1,11 @@
 use alloc::string::String;
 use alloc::format;
-use crate::kernel::syscalls::user_api::*;
+use usrlib::user_api::*;
 use crate::kernel::threads::scheduler::get_scheduler;
 use crate::kernel::threads::thread::Thread;
 
 pub fn syscall_test() {
-    let t1 = Thread::new_user_thread(syscall_test_thread);
+    let t1 = Thread::new_user_thread("hello");
     let scheduler = get_scheduler();
     scheduler.ready(t1);
     scheduler.schedule();
@@ -41,7 +41,7 @@ fn syscall_test_thread() {
 /// Separate test using fast syscalls (syscall/sysret) — can be spawned additionally.
 #[allow(dead_code)]
 pub fn fast_syscall_test() {
-    let t = Thread::new_user_thread(fast_syscall_test_thread);
+    let t = Thread::new_user_thread("hello");
     let scheduler = get_scheduler();
     scheduler.ready(t);
     scheduler.schedule();

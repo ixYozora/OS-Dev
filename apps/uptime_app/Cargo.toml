@@ -1,0 +1,11 @@
+[package]
+edition = "2024"
+name = "uptime_app"
+version = "0.1.0"
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/uptime_app.rs"
+
+[dependencies]
+usrlib = { path = "../../usrlib" }

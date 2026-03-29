@@ -15,10 +15,12 @@ use core::sync::atomic::AtomicUsize;
 use core::{fmt, ptr};
 
 use crate::consts;
-use crate::consts::STACK_SIZE;
+use crate::consts::{STACK_SIZE, USER_CODE_VIRT_START, USER_STACK_VIRT_START, USER_STACK_VIRT_END};
 use crate::devices::pit;
 use crate::kernel::cpu;
-use crate::kernel::syscalls::user_api::usr_thread_exit;
+use crate::kernel::multiboot::MULTIBOOT_INFO;
+use crate::kernel::paging::pages;
+use usrlib::user_api::usr_thread_exit;
 use crate::kernel::threads::scheduler::get_scheduler;
 
 unsafe extern "C" {
@@ -31,111 +33,110 @@ pub fn next_id() -> usize {
     THREAD_ID_COUNTER.fetch_add(1, core::sync::atomic::Ordering::SeqCst)
 }
 
-#[naked]
-unsafe extern "C" fn thread_start(stack_ptr: usize) {
-    unsafe {
-        naked_asm!(
-            "mov rsp, rdi",
-            "call unlock_scheduler",
-            "xor rbp, rbp",
-            "popf",
-            "pop rbp",
-            "pop rdi",
-            "pop rsi",
-            "pop rdx",
-            "pop rcx",
-            "pop rbx",
-            "pop rax",
-            "pop r15",
-            "pop r14",
-            "pop r13",
-            "pop r12",
-            "pop r11",
-            "pop r10",
-            "pop r9",
-            "pop r8",
-            "ret",
-        )
-    }
+#[unsafe(naked)]
+extern "C" fn thread_start(stack_ptr: usize) {
+    naked_asm!(
+        "mov rsp, rdi",
+        "call unlock_scheduler",
+        "xor rbp, rbp",
+        "popf",
+        "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rbx",
+        "pop rax",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "ret",
+    )
 }
 
-/// Context switch: save current context, restore next, update TSS rsp0.
-/// `next_stack_end` (rdx) is the top of the next thread's kernel stack for TSS.
-#[naked]
-unsafe extern "C" fn thread_switch(
+/// Context switch: save current context, restore next, switch address space, update TSS rsp0.
+/// Parameters: rdi = &current.stack_ptr, rsi = next.stack_ptr,
+///             rdx = next kernel stack end, rcx = next PML4 physical address
+#[unsafe(naked)]
+extern "C" fn thread_switch(
     current_stack_ptr: *mut usize,
     next_stack: usize,
     next_stack_end: usize,
+    next_pml4: u64,
 ) {
-    unsafe {
-        naked_asm!(
-            "push r8",
-            "push r9",
-            "push r10",
-            "push r11",
-            "push r12",
-            "push r13",
-            "push r14",
-            "push r15",
-            "push rax",
-            "push rbx",
-            "push rcx",
-            "push rdx",
-            "push rsi",
-            "push rdi",
-            "push rbp",
-            "pushf",
-            "mov [rdi], rsp",
-            "mov rsp, rsi",
-            "mov rdi, rdx",
-            "call _tss_set_rsp0",
-            "call unlock_scheduler",
-            "popf",
-            "pop rbp",
-            "pop rdi",
-            "pop rsi",
-            "pop rdx",
-            "pop rcx",
-            "pop rbx",
-            "pop rax",
-            "pop r15",
-            "pop r14",
-            "pop r13",
-            "pop r12",
-            "pop r11",
-            "pop r10",
-            "pop r9",
-            "pop r8",
-            "ret",
-        )
-    }
+    naked_asm!(
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "push rax",
+        "push rbx",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push rbp",
+        "pushf",
+        "mov [rdi], rsp",
+        "mov rsp, rsi",
+        "mov cr3, rcx",
+        "mov rdi, rdx",
+        "call _tss_set_rsp0",
+        "call unlock_scheduler",
+        "popf",
+        "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rbx",
+        "pop rax",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "ret",
+    )
 }
 
 /// Switch to Ring 3 via iretq. Builds the interrupt return frame and executes iretq.
 /// rdi = entry point (RIP), rsi = user stack pointer (RSP)
-#[naked]
-unsafe extern "C" fn thread_user_start(entry: usize, user_stack: usize) {
-    unsafe {
-        naked_asm!(
-            "push 0x23",                    // SS: user data selector 0x20 | RPL 3
-            "push rsi",                      // RSP: user stack pointer
-            "pushf",                         // RFLAGS
-            "or qword ptr [rsp], 0x200",     // set IF (bit 9) for user mode
-            "push 0x2B",                    // CS: user code selector 0x28 | RPL 3
-            "push rdi",                      // RIP: entry function
-            "iretq",
-        )
-    }
+#[unsafe(naked)]
+extern "C" fn thread_user_start(entry: usize, user_stack: usize) {
+    naked_asm!(
+        "push 0x23",
+        "push rsi",
+        "pushf",
+        "or qword ptr [rsp], 0x200",
+        "push 0x2B",
+        "push rdi",
+        "iretq",
+    )
 }
 
 #[repr(C)]
 pub struct Thread {
     id: usize,
+    pid: usize,
     kernel_stack: Vec<u64>,
     user_stack: Vec<u64>,
     stack_ptr: usize,
     entry: fn(),
     is_kernel_thread: bool,
+    pml4_addr: u64,
 }
 
 fn allocate_stack() -> Vec<u64> {
@@ -148,35 +149,72 @@ fn allocate_stack() -> Vec<u64> {
 
 impl Thread {
     pub fn new_kernel_thread(entry: fn()) -> Box<Thread> {
+        let pml4 = pages::init_kernel_tables();
+        let pml4_addr = ptr::from_ref(pml4) as u64;
+
         let kernel_stack = allocate_stack();
         let user_stack = allocate_stack();
         let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
 
         let mut thread = Box::new(Thread {
             id: next_id(),
+            pid: 0,
             kernel_stack,
             user_stack,
             stack_ptr,
             entry,
             is_kernel_thread: true,
+            pml4_addr,
         });
 
         thread.prepare_kernel_stack(Thread::kickoff_kernel_thread as u64);
         thread
     }
 
-    pub fn new_user_thread(entry: fn()) -> Box<Thread> {
+    pub fn new_user_thread(app_name: &str) -> Box<Thread> {
+        let pml4 = pages::init_kernel_tables();
+        let pml4_addr = ptr::from_ref(pml4) as u64;
+
+        let multiboot = MULTIBOOT_INFO.get().expect("Multiboot info not available");
+        let archive = multiboot.get_initrd_archive().expect("No initrd archive found");
+
+        let mut app_data: Option<&[u8]> = None;
+        for entry in archive.entries() {
+            if let Ok(name) = entry.filename().as_str() {
+                if name == app_name {
+                    app_data = Some(entry.data());
+                    break;
+                }
+            }
+        }
+
+        let app_data = app_data.unwrap_or_else(|| panic!("App '{}' not found in initrd", app_name));
+
+        unsafe { pages::map_user_app(pml4, app_data); }
+        unsafe { pages::map_user_stack(pml4); }
+
+        let user_stack = unsafe {
+            Vec::from_raw_parts(
+                USER_STACK_VIRT_START as *mut u64,
+                STACK_SIZE / 8,
+                STACK_SIZE / 8,
+            )
+        };
+
+        let entry: fn() = unsafe { core::mem::transmute(USER_CODE_VIRT_START) };
+
         let kernel_stack = allocate_stack();
-        let user_stack = allocate_stack();
         let stack_ptr = ptr::from_ref(&kernel_stack[kernel_stack.capacity() - 1]) as usize;
 
         let mut thread = Box::new(Thread {
             id: next_id(),
+            pid: 0,
             kernel_stack,
             user_stack,
             stack_ptr,
             entry,
             is_kernel_thread: false,
+            pml4_addr,
         });
 
         thread.prepare_kernel_stack(Thread::kickoff_user_thread as u64);
@@ -185,6 +223,7 @@ impl Thread {
 
     pub fn start(&mut self) {
         unsafe {
+            pages::write_cr3_raw(self.pml4_addr);
             thread_start(self.stack_ptr);
         }
     }
@@ -195,10 +234,12 @@ impl Thread {
                 panic!("No Thread!");
             }
             let next_stack_end = (*next).get_kernel_stack_end();
+            let next_pml4 = (*next).pml4_addr;
             thread_switch(
                 &mut (*current).stack_ptr,
                 (*next).stack_ptr,
                 next_stack_end,
+                next_pml4,
             );
         }
     }
@@ -207,23 +248,33 @@ impl Thread {
         self.id
     }
 
+    pub fn get_pid(&self) -> usize {
+        self.pid
+    }
+
+    pub fn set_pid(&mut self, pid: usize) {
+        self.pid = pid;
+    }
+
     fn get_kernel_stack_end(&self) -> usize {
         let cap = self.kernel_stack.capacity();
         ptr::from_ref(&self.kernel_stack[cap - 1]) as usize + 8
     }
 
     fn get_user_stack_end(&self) -> usize {
-        let cap = self.user_stack.capacity();
-        ptr::from_ref(&self.user_stack[cap - 1]) as usize + 8
+        if self.is_kernel_thread {
+            let cap = self.user_stack.capacity();
+            ptr::from_ref(&self.user_stack[cap - 1]) as usize + 8
+        } else {
+            USER_STACK_VIRT_END
+        }
     }
 
-    /// Prepare the kernel stack so that thread_start / thread_switch can
-    /// pop the saved context and `ret` into the given kickoff function.
     fn prepare_kernel_stack(&mut self, kickoff: u64) {
         let thread = ptr::from_mut(self) as u64;
         let length = self.kernel_stack.len();
 
-        self.kernel_stack[length - 1] = 0x131155; // Dummy return address
+        self.kernel_stack[length - 1] = 0x131155;
         self.kernel_stack[length - 2] = kickoff;
         self.kernel_stack[length - 3] = 0; // r8
         self.kernel_stack[length - 4] = 0; // r9
@@ -245,8 +296,6 @@ impl Thread {
         self.stack_ptr = self.stack_ptr - (consts::STACK_ENTRY_SIZE * 17);
     }
 
-    /// Kickoff for kernel threads (Ring 0). Sets TSS rsp0, enables interrupts,
-    /// calls the entry function, then exits via the scheduler.
     fn kickoff_kernel_thread(&self) {
         let stack_end = self.get_kernel_stack_end();
         unsafe {
@@ -257,9 +306,6 @@ impl Thread {
         get_scheduler().exit();
     }
 
-    /// Kickoff for user threads. Sets TSS rsp0, pushes a trampoline return
-    /// address onto the user stack (so `ret` from entry calls `usr_thread_exit`),
-    /// then switches to Ring 3 via iretq.
     fn kickoff_user_thread(&self) {
         let stack_end = self.get_kernel_stack_end();
         unsafe {
@@ -267,19 +313,8 @@ impl Thread {
         }
         let user_stack = self.get_user_stack_end();
 
-        // Place trampoline address at top of user stack so that when the
-        // entry function returns, it lands in user_thread_exit_trampoline.
-        let user_sp = user_stack - 8;
-        unsafe {
-            *(user_sp as *mut usize) = user_thread_exit_trampoline as usize;
-            thread_user_start(self.entry as usize, user_sp);
-        }
+        thread_user_start(self.entry as usize, user_stack);
     }
-}
-
-/// Trampoline that runs in Ring 3 after a user entry function returns.
-fn user_thread_exit_trampoline() {
-    usr_thread_exit();
 }
 
 pub fn sleep_ms(ms: usize) {

@@ -9,9 +9,14 @@
 
 use core::arch::{asm, naked_asm};
 use crate::kernel::syscalls::functions::hello::sys_hello_world;
-use crate::kernel::syscalls::functions::threads::{sys_thread_yield, sys_thread_exit, sys_thread_get_id};
-use crate::kernel::syscalls::functions::io::{sys_get_system_time, sys_print, sys_get_char};
-use crate::kernel::syscalls::user_api::SyscallFunction;
+use crate::kernel::syscalls::functions::threads::{sys_thread_yield, sys_thread_exit, sys_thread_get_id, sys_get_process_id, sys_spawn_process, sys_wait_pid};
+use crate::kernel::syscalls::functions::io::{
+    sys_get_system_time, sys_print, sys_get_char, sys_set_color, sys_buff_clear, sys_get_key,
+    sys_pcspk_play, sys_get_text_cursor, sys_set_text_cursor, sys_clear_text_bands,
+};
+use crate::kernel::syscalls::functions::memory::{sys_dump_vmas, sys_map_heap};
+use crate::kernel::syscalls::functions::fb::{sys_fb_get_dims, sys_fb_draw_pixel, sys_fb_draw_bitmap};
+use usrlib::user_api::SyscallFunction;
 
 unsafe extern "C" {
     static _kernel_rsp0: u64;
@@ -38,6 +43,21 @@ impl SyscallFunctionTable {
                 sys_get_system_time as *const u64,
                 sys_print as *const u64,
                 sys_get_char as *const u64,
+                sys_get_process_id as *const u64,
+                sys_dump_vmas as *const u64,
+                sys_map_heap as *const u64,
+                sys_spawn_process as *const u64,
+                sys_wait_pid as *const u64,
+                sys_set_color as *const u64,
+                sys_buff_clear as *const u64,
+                sys_get_key as *const u64,
+                sys_pcspk_play as *const u64,
+                sys_fb_get_dims as *const u64,
+                sys_fb_draw_pixel as *const u64,
+                sys_fb_draw_bitmap as *const u64,
+                sys_get_text_cursor as *const u64,
+                sys_set_text_cursor as *const u64,
+                sys_clear_text_bands as *const u64,
             ],
         }
     }
@@ -53,9 +73,9 @@ unsafe impl Sync for SyscallFunctionTable {}
 /// System call dispatcher (interrupt 0x80).
 /// Syscall number in rax, parameters in rdi/rsi/rdx/rcx/r8/r9 per System V ABI.
 /// Return value passed back in rax.
-#[naked]
+#[unsafe(naked)]
 pub extern "C" fn syscall_disp() {
-    unsafe { naked_asm!(
+    naked_asm!(
         // Save all registers except rax (syscall number / return value)
         "push rcx",
         "push rdx",
@@ -97,7 +117,7 @@ pub extern "C" fn syscall_disp() {
 
         NUM_SYSCALLS = const SyscallFunction::NumSyscalls as usize,
         SYSCALL_TABLE = sym SYSCALL_TABLE
-    ) }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -105,19 +125,12 @@ pub extern "C" fn syscall_disp() {
 // ---------------------------------------------------------------------------
 
 /// Scratch space for user RSP during fast syscall entry.
-/// Safe because interrupts are disabled (FMASK clears IF) and we have a single CPU.
 static mut FAST_SYSCALL_USER_RSP: u64 = 0;
 
 /// Fast system call handler, entered via the `syscall` instruction.
-///
-/// On entry by hardware:
-///   RCX = user RIP (return address), R11 = user RFLAGS, RFLAGS masked by FMASK.
-///   RSP is still the user stack — NO automatic stack switch.
-///   RAX = syscall number, parameters in rdi/rsi/rdx/r10/r8/r9
-///   (r10 replaces rcx since syscall clobbers rcx).
-#[naked]
+#[unsafe(naked)]
 pub extern "C" fn fast_syscall_disp() {
-    unsafe { naked_asm!(
+    naked_asm!(
         // --- Switch to kernel stack (interrupts are disabled via FMASK) ---
         "mov [{user_rsp}], rsp",
         "mov rsp, [{kernel_rsp0}]",
@@ -180,7 +193,7 @@ pub extern "C" fn fast_syscall_disp() {
         kernel_rsp0 = sym _kernel_rsp0,
         NUM_SYSCALLS = const SyscallFunction::NumSyscalls as usize,
         SYSCALL_TABLE = sym SYSCALL_TABLE,
-    ) }
+    )
 }
 
 // ---------------------------------------------------------------------------

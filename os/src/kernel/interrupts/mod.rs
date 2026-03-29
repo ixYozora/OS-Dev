@@ -4,9 +4,10 @@ pub mod intdispatcher;
 pub mod isr;
 
 #[derive(Debug)]
-#[repr(C, packed)]
+#[repr(C)]
 /// Context that is pushed onto the stack automatically
 /// by the CPU when an interrupt occurs.
+/// `repr(C)` (not `packed`): five `u64` fields match the hardware frame with 8-byte alignment.
 pub struct InterruptStackFrame {
     pub instruction_pointer: u64,
     pub code_segment: u64,

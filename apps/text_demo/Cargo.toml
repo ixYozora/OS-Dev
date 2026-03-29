@@ -1,0 +1,11 @@
+[package]
+edition = "2024"
+name = "text_demo"
+version = "0.1.0"
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/text_demo.rs"
+
+[dependencies]
+usrlib = { path = "../../usrlib" }

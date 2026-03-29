@@ -4,6 +4,22 @@ use spin::once::Once;
 use crate::kernel::interrupts::intdispatcher::int_disp;
 use crate::kernel::interrupts::InterruptStackFrame;
 use crate::kernel::syscalls::syscall_dispatcher::syscall_disp;
+use crate::kernel::paging::pages;
+
+extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) {
+    let cr2: u64;
+    unsafe { asm!("mov {}, cr2", out(reg) cr2); }
+
+    if pages::check_and_grow_user_stack(cr2) {
+        return;
+    }
+
+    let rip = stack_frame.instruction_pointer;
+    panic!(
+        "PAGE FAULT!\n  Faulting address (CR2): 0x{:016x}\n  Error code: {:#06b}\n  RIP: 0x{:016x}",
+        cr2, error_code, rip
+    );
+}
 
 /// Static instance of the Interrupt Descriptor Table (IDT).
 /// Wrapped inside a Once, because Idt::new() is not const.
@@ -143,7 +159,7 @@ impl Idt {
                 interrupt_handler!(0x0b, int_disp),
                 interrupt_handler!(0x0c, int_disp),
                 interrupt_handler!(0x0d, int_disp),
-                interrupt_handler!(0x0e, int_disp),
+                IdtEntry::with_error_code(page_fault_handler),
                 interrupt_handler!(0x0f, int_disp),
                 interrupt_handler!(0x10, int_disp),
                 interrupt_handler!(0x11, int_disp),

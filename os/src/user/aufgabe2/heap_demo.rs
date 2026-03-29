@@ -19,28 +19,16 @@ pub fn run() {
 
     // --- State Pre-Allocation ---
     buff_print!("\n=== Memory State: Pre-Allocation ===\n");
-    allocator::dump_free_list_lfb();
-
     // --- Allocation ---
     buff_print!("\n=== Allocating a TestStruct ===\n");
     let my_box = Box::new(TestStruct { x: 1, y: 2 });
     buff_print!("Successfully allocated object at address: {:p}\n", my_box);
     buff_print!("Object contents: x={}, y={}\n", my_box.x, my_box.y);
 
-    // --- State Post-Allocation ---
-    buff_print!("\n=== Memory State: Post-Allocation ===\n");
-    allocator::dump_free_list_lfb();
-
     get_key_buffer().wait_for_key();
-    // The 'drop' function is used here to explicitly deallocate the memory immediately
-    // so we can observe the state change.
     buff_print!("\n=== Explicitly Deallocating the TestStruct ===\n");
     drop(my_box);
     buff_print!("Object deallocated.\n");
-
-    // --- State Post-Deallocation ---
-    buff_print!("\n=== Memory State: Post-Deallocation ===\n");
-    allocator::dump_free_list_lfb();
 
 
 

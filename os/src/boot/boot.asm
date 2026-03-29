@@ -14,7 +14,7 @@
 ;
 
 ; Auskommentieren, um im Grafikmodus zu booten
-%define TEXT_MODE
+;%define TEXT_MODE
 
  
 ; Lade-Adresse des Kernels, muss mit der Angabe in 'sections' konsistent sein!

@@ -1,4 +1,4 @@
-# A tiny x86_64 OS in Rust (graphics, preemptive threads, shell)
+# A tiny x86_64 OS in Rust (graphics, preemptive threads, shell) | currently oudated README 29.03.2026
 
 ## Overview
 A teaching/learning OS kernel for x86_64 written in Rust.

@@ -1,38 +1,34 @@
-
 ######################################
 # Environment variables
 ######################################
 
 [env.development]
-CARGO_CFG_TARGET_FAMILY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/hhu_tosr.json"
-BUILD_DIRECTORY = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/hhu_tosr/debug"
+CARGO_CFG_TARGET_FAMILY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/hhu_tosr_kernel.json"
+BUILD_DIRECTORY = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/hhu_tosr_kernel/debug"
 CARGO_BUILD_OPTION = "--lib"
+# Matches release: no libcore UB-check ud2 on read_unaligned/memcmp hot paths (see workspace profile.dev.package.*).
+RUSTFLAGS = "-Cdebug-assertions=no"
 
 [env.production]
-CARGO_CFG_TARGET_FAMILY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/hhu_tosr.json"
-BUILD_DIRECTORY = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/hhu_tosr/release"
+CARGO_CFG_TARGET_FAMILY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/hhu_tosr_kernel.json"
+BUILD_DIRECTORY = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/hhu_tosr_kernel/release"
 CARGO_BUILD_OPTION = "--release"
 
 [env]
-LINKER_MAC = "x86_64-elf-ld"
-LINKER_LINUX = "ld"
-SOUND_MAC = "coreaudio,id=snd0"
-SOUND_LINUX = "id=snd0,driver=pa"
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 RUST_TARGET_PATH = "${CARGO_MAKE_WORKING_DIRECTORY}"
 SOURCE_DIRECTORY = "${CARGO_MAKE_WORKING_DIRECTORY}/src"
 LINKER_FILE = "${SOURCE_DIRECTORY}/boot/linker.ld"
 RUST_OBJECT = "${BUILD_DIRECTORY}/lib${CARGO_MAKE_PROJECT_NAME}.a"
 KERNEL = "${BUILD_DIRECTORY}/kernel.bin"
-ISO = "${BUILD_DIRECTORY}/${CARGO_MAKE_PROJECT_NAME}.iso"
-
 
 ######################################
 # Build tasks
 ######################################
 
-# default task
+# Default task
 [tasks.default]
-alias = "iso"
+alias = "link"
 
 # 
 # Compiling Rust sources
@@ -48,76 +44,10 @@ args = [ "build", "-Z", "build-std=core,alloc", "-Z", "build-std-features=compil
 command = "nasm"
 args = [ "-f", "elf64", "-w+error=label-redef-late", "-o", "${BUILD_DIRECTORY}/boot.o", "${SOURCE_DIRECTORY}/boot/boot.asm" ]
 
-
-# 
-# Linking 
 #
-[tasks.link.mac]
-command = "${LINKER_MAC}"
-args = [ "-n", "-T", "${LINKER_FILE}", "-o", "${KERNEL}", "${BUILD_DIRECTORY}/boot.o", "${RUST_OBJECT}" ]
+# Linking
+#
+[tasks.link]
+command = "${LINKER}"
+args = [ "-n", "-T", "${LINKER_FILE}", "-o", "${KERNEL}", "${BUILD_DIRECTORY}/boot.o", "${RUST_OBJECT}", "-z", "noexecstack", "-e", "0x100030" ]
 dependencies = [ "compile", "build-boot-asm" ]
-
-[tasks.link.linux]
-command = "${LINKER_LINUX}"
-args = [ "-n", "-T", "${LINKER_FILE}", "-o", "${KERNEL}", "${BUILD_DIRECTORY}/boot.o", "${RUST_OBJECT}" ]
-dependencies = [ "compile", "build-boot-asm" ]
-
-#
-# Bootloader tasks
-#
-[tasks.grub-create-directory]
-command = "mkdir"
-args = [ "-p", "${BUILD_DIRECTORY}/isofiles/boot/grub" ]
-
-[tasks.grub-copy-kernel]
-command = "cp"
-args = [ "${KERNEL}", "${BUILD_DIRECTORY}/isofiles/boot" ]
-dependencies = [ "link", "grub-create-directory" ]
-
-[tasks.grub-copy-cfg]
-command = "cp"
-args = [ "${SOURCE_DIRECTORY}/boot/grub.cfg", "${BUILD_DIRECTORY}/isofiles/boot/grub" ]
-dependencies = [ "grub-create-directory" ]
-
-[tasks.iso]
-command = "grub-mkrescue"
-args = [ "-o", "${ISO}", "${BUILD_DIRECTORY}/isofiles" ]
-dependencies = [ "grub-copy-kernel", "grub-copy-cfg" ]
-
-
-######################################
-# Running & debugging tasks
-######################################
-
-[tasks.qemu.linux]
-command = "qemu-system-x86_64"
-args = [ "-cdrom", "${ISO}", "-serial", "stdio", "-audiodev", "${SOUND_LINUX}", "-machine", "pcspk-audiodev=snd0" ]
-dependencies = [ "iso" ]
-
-[tasks.qemu.mac]
-command = "qemu-system-x86_64"
-args = [ "-cdrom", "${ISO}", "-serial", "stdio", "-audiodev", "${SOUND_MAC}", "-machine", "pcspk-audiodev=snd0" ]
-dependencies = [ "iso" ]
-
-[tasks.qemu-gdb.linux]
-command = "qemu-system-x86_64"
-args = [ "-cdrom", "${ISO}", "-serial", "stdio", "-audiodev", "${SOUND_LINUX}", "-machine", "pcspk-audiodev=snd0", "-s", "-S" ]
-dependencies = [ "iso", "gdb-echo-for-vscode" ]
-
-[tasks.qemu-gdb.mac]
-command = "qemu-system-x86_64"
-args = [ "-cdrom", "${ISO}", "-serial", "stdio", "-s", "-S" ]
-#args = [ "-cdrom", "${ISO}", "-serial", "stdio", "-audiodev", "${SOUND_MAC}", "-machine", "pcspk-audiodev=snd0", "-s", "-S" ]
-dependencies = [ "iso", "gdb-echo-for-vscode" ]
-
-[tasks.gdb-echo-for-vscode]
-command = "echo"
-args = [ "Ready to debug" ]
-
-[tasks.gdb]
-command = "gdb"
-args = [ "-x", "gdbcommands", "${KERNEL}" ]
-
-[tasks.gdbt]
-command = "gdb"
-args = [ "-x", "gdbcommands", "${KERNEL}", "-tui" ]

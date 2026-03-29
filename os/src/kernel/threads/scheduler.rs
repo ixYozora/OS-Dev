@@ -15,6 +15,10 @@ use core::sync::atomic::{AtomicBool, AtomicUsize};
 use spin::{Mutex, Once};
 use crate::kernel::{allocator, cpu};
 use crate::kernel::cpu::enable_int_nested;
+use crate::kernel::processes::process::{self, Process};
+use crate::kernel::processes::vma::{VMA, VmaType};
+use crate::kernel::multiboot::MULTIBOOT_INFO;
+use crate::consts::{USER_CODE_VIRT_START, USER_STACK_VIRT_START, USER_STACK_VIRT_END, PAGE_SIZE};
 use crate::kernel::threads::idle_thread::idle_thread;
 use crate::kernel::threads::thread;
 use crate::kernel::threads::thread::Thread;
@@ -74,8 +78,55 @@ impl Scheduler {
     /// Get the ID of the currently active thread.
     pub fn get_active_tid(&self) -> usize {
         let state = self.state.lock();
-
         state.active_thread.as_ref().unwrap().get_id()
+    }
+
+    /// Get the process ID of the currently active thread.
+    pub fn get_active_pid(&self) -> usize {
+        let state = self.state.lock();
+        state.active_thread.as_ref().unwrap().get_pid()
+    }
+
+    /// Spawn a new process: create a Process, a user thread, and register both.
+    /// Also creates initial VMAs for Code and Stack regions.
+    /// Spawn a new process. Returns the PID on success, or 0 if the app was not found.
+    pub fn spawn_process(&self, app_name: &str) -> usize {
+        let app_size = {
+            let multiboot = MULTIBOOT_INFO.get().expect("Multiboot info not available");
+            let archive = multiboot.get_initrd_archive().expect("No initrd archive found");
+            let mut size = 0usize;
+            for entry in archive.entries() {
+                if let Ok(name) = entry.filename().as_str() {
+                    if name == app_name {
+                        size = entry.data().len();
+                        break;
+                    }
+                }
+            }
+            size
+        };
+
+        if app_size == 0 {
+            return 0;
+        }
+
+        let proc = Process::new(app_name);
+        let pid = proc.get_id();
+        process::add_process(proc);
+
+        let mut thread = Thread::new_user_thread(app_name);
+        thread.set_pid(pid);
+
+        let code_end = USER_CODE_VIRT_START as u64
+            + ((app_size + PAGE_SIZE - 1) / PAGE_SIZE * PAGE_SIZE) as u64;
+        let code_vma = VMA::new(USER_CODE_VIRT_START as u64, code_end, VmaType::Code);
+        process::add_vma(pid, code_vma).expect("Failed to add Code VMA");
+
+        let stack_vma = VMA::new(USER_STACK_VIRT_START as u64, USER_STACK_VIRT_END as u64, VmaType::Stack);
+        process::add_vma(pid, stack_vma).expect("Failed to add Stack VMA");
+
+        self.ready(thread);
+        pid
     }
 
     /// Start the scheduler.
@@ -101,13 +152,17 @@ impl Scheduler {
     }
 
     /// Terminate the current (calling) thread and switch to the next one.
+    /// Also removes the associated process from the process table.
     pub fn exit(&self) {
         let mut state = self.state.lock();
 
         let mut current = state.active_thread.take().unwrap();
+        let pid = current.get_pid();
+        if pid != 0 {
+            process::remove_process(pid);
+        }
 
         let next = state.ready_queue.dequeue().unwrap();
-
         state.active_thread = Some(next);
 
         unsafe {
