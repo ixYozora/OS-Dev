@@ -36,7 +36,7 @@ impl<T> Mutex<T> {
     }
 
     /// Try to acquire the lock once without blocking.
-    pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
 
         let before = self.lock.swap(true, Ordering::Acquire);
         if before {
@@ -52,14 +52,14 @@ impl<T> Mutex<T> {
     /// and store it in the `wait_queue`.
     /// Once the lock is available, the next thread in the `wait_queue` will be woken up
     /// so it can try to acquire the lock again.
-    pub fn lock(&self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
 
         if !SCHEDULER_ACTIVE.load(Ordering::Relaxed) {
 
             let mut before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
             while before {
                 unsafe {
-                    asm!("pause");
+                    asm!("nop", options(nomem, nostack));
                 }
                 before = self.lock.swap(true, core::sync::atomic::Ordering::Acquire);
             }

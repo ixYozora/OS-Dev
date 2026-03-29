@@ -59,6 +59,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphics_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
+name = "heap_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
 name = "hello"
 version = "0.1.0"
 dependencies = [
@@ -70,6 +84,13 @@ name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
+name = "keyboard_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
 
 [[package]]
 name = "lazy_static"
@@ -303,6 +324,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
+name = "sound_aero"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
+name = "sound_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
+name = "sound_tetris"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
 name = "spin"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -323,6 +365,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sync_spin_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
 name = "tar-no-std"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -334,12 +383,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "text_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
+]
+
+[[package]]
 name = "thread_local"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "thread_yield_demo"
+version = "0.1.0"
+dependencies = [
+ "usrlib",
 ]
 
 [[package]]

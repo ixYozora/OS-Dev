@@ -1,0 +1,11 @@
+[package]
+edition = "2024"
+name = "keyboard_demo"
+version = "0.1.0"
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/keyboard_demo.rs"
+
+[dependencies]
+usrlib = { path = "../../usrlib" }

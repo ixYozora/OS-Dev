@@ -14,7 +14,7 @@ extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, e
         return;
     }
 
-    let rip = unsafe { ptr::addr_of!(stack_frame.instruction_pointer).read_unaligned() };
+    let rip = stack_frame.instruction_pointer;
     panic!(
         "PAGE FAULT!\n  Faulting address (CR2): 0x{:016x}\n  Error code: {:#06b}\n  RIP: 0x{:016x}",
         cr2, error_code, rip

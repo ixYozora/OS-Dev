@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use usrlib::allocator::{Locked, LinkedListAllocator};
 use usrlib::user_api::{
-    usr_print, usr_get_char, usr_thread_exit,
+    usr_print, usr_thread_exit,
     usr_get_system_time, usr_get_process_id, usr_map_heap,
     usr_spawn_process, usr_wait_pid,
     usr_set_color, usr_buff_clear, usr_get_key,
@@ -26,9 +26,7 @@ const fn make_color(r: u8, g: u8, b: u8) -> u32 {
 }
 
 const WHITE: u32 = make_color(170, 170, 170);
-const RED: u32 = make_color(170, 0, 0);
 const HHU_BLUE: u32 = make_color(0, 106, 179);
-const HHU_GREEN: u32 = make_color(151, 191, 13);
 
 const PROMPT: &str = "yozora$ ";
 const SHELL_BANNER: &str = r#"
@@ -220,6 +218,8 @@ impl YozoraShell {
             "history" => self.cmd_history(),
             "vmas" => self.cmd_vmas(),
             "demo" => self.cmd_demo(&args),
+            "graphics" => self.cmd_graphics(),
+            "sound" => self.cmd_sound(&args),
             "exit" | "quit" => {
                 usr_print("Goodbye.\n");
                 usr_thread_exit();
@@ -241,12 +241,15 @@ impl YozoraShell {
         usr_print("  history        List previous commands\n");
         usr_print("  vmas           Dump VMAs of this process\n");
         usr_print("  demo <name>    Run a demo (see list below)\n");
+        usr_print("  graphics       LFB gradient + HHU bitmap (background)\n");
+        usr_print("  sound [name]   PC speaker: tetris | aerodynamic (background)\n");
         usr_print("  exit|quit      Leave the shell\n");
-        usr_print("\nDemo apps (via 'demo <name>'):\n");
-        usr_print("  hello          Task 12/13 demo (heap, VMAs, stack)\n");
-        usr_print("  uptime_app     System uptime (A9 syscalls)\n");
-        usr_print("  vmatest        VMA & heap test (A13 features)\n");
-        usr_print("\nType any app name directly to launch it.\n");
+        usr_print("\nDemo apps (via 'demo <name>' or direct name):\n");
+        usr_print("  hello, uptime_app, vmatest  (original A12-A14 demos)\n");
+        usr_print("  text_demo, keyboard_demo, heap_demo  (A1-A2 ports)\n");
+        usr_print("  sound_demo, graphics_demo, thread_yield_demo, sync_spin_demo\n");
+        usr_print("  Legacy aliases: demo text|keyboard|heap|sound|graphics|threads|synchronize\n");
+        usr_print("\nType any initrd app name directly to launch it (foreground).\n");
     }
 
     fn cmd_clear(&self) {
@@ -318,10 +321,55 @@ impl YozoraShell {
 
     fn cmd_demo(&self, args: &[&str]) {
         if args.is_empty() {
-            usr_print("Demos: hello, uptime_app, vmatest\n");
+            usr_print("Demos: hello, uptime_app, vmatest, text_demo, keyboard_demo, heap_demo,\n");
+            usr_print("       sound_demo, graphics_demo, thread_yield_demo, sync_spin_demo\n");
+            usr_print("Aliases: text, keyboard, heap, sound, graphics, threads, synchronize\n");
             return;
         }
-        self.cmd_run_external(args[0]);
+        let app = demo_resolve(args[0]);
+        self.cmd_run_external(app);
+    }
+
+    fn cmd_graphics(&self) {
+        if self.spawn_background("graphics_demo") {
+            usr_print("Graphics demo started in background.\n");
+        }
+    }
+
+    fn cmd_sound(&self, args: &[&str]) {
+        if args.is_empty() {
+            usr_print("Sounds: tetris, aerodynamic (background). Example: sound tetris\n");
+            return;
+        }
+        match args[0] {
+            "tetris" => {
+                if self.spawn_background("sound_tetris") {
+                    usr_print("Queued Tetris theme...\n");
+                }
+            }
+            "aerodynamic" => {
+                if self.spawn_background("sound_aero") {
+                    usr_print("Queued Aerodynamic...\n");
+                }
+            }
+            other => {
+                usr_print("Unknown tune: ");
+                usr_print(other);
+                usr_print(". Try: sound tetris | sound aerodynamic\n");
+            }
+        }
+    }
+
+    fn spawn_background(&self, name: &str) -> bool {
+        let pid = usr_spawn_process(name);
+        if pid == 0 {
+            usr_print("Could not start '");
+            usr_print(name);
+            usr_print("'\n");
+            false
+        } else {
+            true
+        }
     }
 
     fn cmd_run_external(&self, name: &str) {
@@ -333,6 +381,19 @@ impl YozoraShell {
             return;
         }
         usr_wait_pid(pid);
+    }
+}
+
+fn demo_resolve(name: &str) -> &str {
+    match name {
+        "text" => "text_demo",
+        "keyboard" => "keyboard_demo",
+        "heap" => "heap_demo",
+        "sound" => "sound_demo",
+        "graphics" => "graphics_demo",
+        "threads" => "thread_yield_demo",
+        "synchronize" | "sync" => "sync_spin_demo",
+        other => other,
     }
 }
 

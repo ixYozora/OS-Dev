@@ -313,9 +313,7 @@ impl Thread {
         }
         let user_stack = self.get_user_stack_end();
 
-        unsafe {
-            thread_user_start(self.entry as usize, user_stack);
-        }
+        thread_user_start(self.entry as usize, user_stack);
     }
 }
 

@@ -31,6 +31,13 @@ pub enum SyscallFunction {
     SetColor,
     BuffClear,
     GetKey,
+    PcspkPlayTune,
+    FbGetDims,
+    FbDrawPixel,
+    FbDrawBitmap,
+    GetTextCursor,
+    SetTextCursor,
+    ClearTextBands,
     NumSyscalls,
 }
 
@@ -101,6 +108,56 @@ pub fn usr_get_key() -> u64 {
     syscall0(SyscallFunction::GetKey)
 }
 
+/// PC speaker tunes from kernel (Ring 0 only in hardware). `tune_id`: 0 = tetris, 1 = aerodynamic, 2 = both.
+pub fn usr_pcspk_play(tune_id: u64) {
+    syscall1(SyscallFunction::PcspkPlayTune, tune_id);
+}
+
+/// Returns `(width << 32) | height`, or 0 if no linear framebuffer.
+pub fn usr_fb_get_dims() -> u64 {
+    syscall0(SyscallFunction::FbGetDims)
+}
+
+pub fn usr_fb_draw_pixel(x: u32, y: u32, color: u32) {
+    syscall3(
+        SyscallFunction::FbDrawPixel,
+        x as u64,
+        y as u64,
+        color as u64,
+    );
+}
+
+pub fn usr_fb_draw_bitmap(x: u32, y: u32, w: u32, h: u32, rgb: &[u8]) {
+    syscall6(
+        SyscallFunction::FbDrawBitmap,
+        x as u64,
+        y as u64,
+        w as u64,
+        h as u64,
+        rgb.as_ptr() as u64,
+        rgb.len() as u64,
+    );
+}
+
+/// `(x << 32) | y` in pixels; 0 if no LFB.
+pub fn usr_get_text_cursor() -> u64 {
+    syscall0(SyscallFunction::GetTextCursor)
+}
+
+pub fn usr_set_text_cursor(x: u32, y: u32) {
+    syscall2(SyscallFunction::SetTextCursor, x as u64, y as u64);
+}
+
+/// Clear `count` text rows starting at `base_y`, spaced by `step_px` (use 16 to match legacy shell demos).
+pub fn usr_clear_text_bands(base_y: u32, step_px: u32, count: u32) {
+    syscall3(
+        SyscallFunction::ClearTextBands,
+        base_y as u64,
+        step_px as u64,
+        count as u64,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Low-level syscall invocation (System V AMD64 ABI register convention)
 // ---------------------------------------------------------------------------
@@ -141,6 +198,49 @@ pub fn syscall2(syscall: SyscallFunction, arg1: u64, arg2: u64) -> u64 {
             inlateout("rax") syscall as u64 => ret,
             in("rdi") arg1,
             in("rsi") arg2,
+            options(preserves_flags, nostack)
+        );
+    }
+    ret
+}
+
+#[inline(always)]
+pub fn syscall3(syscall: SyscallFunction, arg1: u64, arg2: u64, arg3: u64) -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!(
+            "int 0x80",
+            inlateout("rax") syscall as u64 => ret,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            options(preserves_flags, nostack)
+        );
+    }
+    ret
+}
+
+#[inline(always)]
+pub fn syscall6(
+    syscall: SyscallFunction,
+    arg1: u64,
+    arg2: u64,
+    arg3: u64,
+    arg4: u64,
+    arg5: u64,
+    arg6: u64,
+) -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!(
+            "int 0x80",
+            inlateout("rax") syscall as u64 => ret,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            in("rcx") arg4,
+            in("r8") arg5,
+            in("r9") arg6,
             options(preserves_flags, nostack)
         );
     }
@@ -215,6 +315,52 @@ pub fn fast_usr_get_key() -> u64 {
     fast_syscall0(SyscallFunction::GetKey)
 }
 
+pub fn fast_usr_pcspk_play(tune_id: u64) {
+    fast_syscall1(SyscallFunction::PcspkPlayTune, tune_id);
+}
+
+pub fn fast_usr_fb_get_dims() -> u64 {
+    fast_syscall0(SyscallFunction::FbGetDims)
+}
+
+pub fn fast_usr_fb_draw_pixel(x: u32, y: u32, color: u32) {
+    fast_syscall3(
+        SyscallFunction::FbDrawPixel,
+        x as u64,
+        y as u64,
+        color as u64,
+    );
+}
+
+pub fn fast_usr_fb_draw_bitmap(x: u32, y: u32, w: u32, h: u32, rgb: &[u8]) {
+    fast_syscall6(
+        SyscallFunction::FbDrawBitmap,
+        x as u64,
+        y as u64,
+        w as u64,
+        h as u64,
+        rgb.as_ptr() as u64,
+        rgb.len() as u64,
+    );
+}
+
+pub fn fast_usr_get_text_cursor() -> u64 {
+    fast_syscall0(SyscallFunction::GetTextCursor)
+}
+
+pub fn fast_usr_set_text_cursor(x: u32, y: u32) {
+    fast_syscall2(SyscallFunction::SetTextCursor, x as u64, y as u64);
+}
+
+pub fn fast_usr_clear_text_bands(base_y: u32, step_px: u32, count: u32) {
+    fast_syscall3(
+        SyscallFunction::ClearTextBands,
+        base_y as u64,
+        step_px as u64,
+        count as u64,
+    );
+}
+
 #[inline(always)]
 pub fn fast_syscall0(syscall: SyscallFunction) -> u64 {
     let ret: u64;
@@ -255,6 +401,53 @@ pub fn fast_syscall2(syscall: SyscallFunction, arg1: u64, arg2: u64) -> u64 {
             inlateout("rax") syscall as u64 => ret,
             in("rdi") arg1,
             in("rsi") arg2,
+            out("rcx") _,
+            out("r11") _,
+            options(nostack)
+        );
+    }
+    ret
+}
+
+#[inline(always)]
+pub fn fast_syscall3(syscall: SyscallFunction, arg1: u64, arg2: u64, arg3: u64) -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!(
+            "syscall",
+            inlateout("rax") syscall as u64 => ret,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            out("rcx") _,
+            out("r11") _,
+            options(nostack)
+        );
+    }
+    ret
+}
+
+#[inline(always)]
+pub fn fast_syscall6(
+    syscall: SyscallFunction,
+    arg1: u64,
+    arg2: u64,
+    arg3: u64,
+    arg4: u64,
+    arg5: u64,
+    arg6: u64,
+) -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!(
+            "syscall",
+            inlateout("rax") syscall as u64 => ret,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            in("r10") arg4,
+            in("r8") arg5,
+            in("r9") arg6,
             out("rcx") _,
             out("r11") _,
             options(nostack)

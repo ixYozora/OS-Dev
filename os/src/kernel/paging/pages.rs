@@ -224,8 +224,10 @@ pub fn check_and_grow_user_stack(fault_addr: u64) -> bool {
 pub unsafe fn map_user_app(pml4_table: &mut PageTable, app_data: &[u8]) {
     let num_pages = (app_data.len() + PAGE_SIZE - 1) / PAGE_SIZE;
 
-    let phys_base = {
-        FRAME_ALLOCATOR.lock().alloc_block(num_pages)
+    let phys_base = unsafe {
+        FRAME_ALLOCATOR
+            .lock()
+            .alloc_block(num_pages)
             .expect("Out of frames for user app")
     };
 

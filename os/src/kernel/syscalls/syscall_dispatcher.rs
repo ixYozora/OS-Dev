@@ -10,8 +10,12 @@
 use core::arch::{asm, naked_asm};
 use crate::kernel::syscalls::functions::hello::sys_hello_world;
 use crate::kernel::syscalls::functions::threads::{sys_thread_yield, sys_thread_exit, sys_thread_get_id, sys_get_process_id, sys_spawn_process, sys_wait_pid};
-use crate::kernel::syscalls::functions::io::{sys_get_system_time, sys_print, sys_get_char, sys_set_color, sys_buff_clear, sys_get_key};
+use crate::kernel::syscalls::functions::io::{
+    sys_get_system_time, sys_print, sys_get_char, sys_set_color, sys_buff_clear, sys_get_key,
+    sys_pcspk_play, sys_get_text_cursor, sys_set_text_cursor, sys_clear_text_bands,
+};
 use crate::kernel::syscalls::functions::memory::{sys_dump_vmas, sys_map_heap};
+use crate::kernel::syscalls::functions::fb::{sys_fb_get_dims, sys_fb_draw_pixel, sys_fb_draw_bitmap};
 use usrlib::user_api::SyscallFunction;
 
 unsafe extern "C" {
@@ -47,6 +51,13 @@ impl SyscallFunctionTable {
                 sys_set_color as *const u64,
                 sys_buff_clear as *const u64,
                 sys_get_key as *const u64,
+                sys_pcspk_play as *const u64,
+                sys_fb_get_dims as *const u64,
+                sys_fb_draw_pixel as *const u64,
+                sys_fb_draw_bitmap as *const u64,
+                sys_get_text_cursor as *const u64,
+                sys_set_text_cursor as *const u64,
+                sys_clear_text_bands as *const u64,
             ],
         }
     }

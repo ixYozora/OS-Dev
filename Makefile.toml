@@ -36,7 +36,7 @@ run_task = { name = "link", fork = true }
 #
 [tasks.create-initrd]
 command = "${TAR}"
-args = [ "-cf", "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/isofiles/boot/initrd.tar" , "-C", "${APPS_BUILD_DIRECTORY}", "hello", "shell", "uptime_app", "vmatest" ]
+args = [ "-cf", "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/isofiles/boot/initrd.tar" , "-C", "${APPS_BUILD_DIRECTORY}", "hello", "shell", "uptime_app", "vmatest", "text_demo", "keyboard_demo", "heap_demo", "sound_demo", "sound_tetris", "sound_aero", "graphics_demo", "thread_yield_demo", "sync_spin_demo" ]
 dependencies = [ "link-members", "grub-create-directory" ]
 
 [tasks.grub-create-directory]

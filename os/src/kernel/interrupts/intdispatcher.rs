@@ -78,6 +78,22 @@ pub static INT_VECTORS: Mutex<IntVectors> = Mutex::new(IntVectors::new());
 pub fn int_disp(vector: u8, stack_frame: InterruptStackFrame, error_code: Option<u64>) {
 
     if INT_VECTORS.lock().report(vector) == false {
+        let rip = stack_frame.instruction_pointer;
+        if vector < 32 {
+            match error_code {
+                Some(ec) => kprint!(
+                    "Unhandled CPU exception vec={} err={:#018x} RIP={:#018x}\n",
+                    vector,
+                    ec,
+                    rip
+                ),
+                None => kprint!(
+                    "Unhandled CPU exception vec={} RIP={:#018x}\n",
+                    vector,
+                    rip
+                ),
+            }
+        }
         panic!("report for interrupt {:?} failed!", vector);
     }
 

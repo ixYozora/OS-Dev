@@ -7,4 +7,17 @@ members = [
     "apps/shell",
     "apps/uptime_app",
     "apps/vmatest",
+    "apps/text_demo",
+    "apps/keyboard_demo",
+    "apps/heap_demo",
+    "apps/sound_demo",
+    "apps/sound_tetris",
+    "apps/sound_aero",
+    "apps/graphics_demo",
+    "apps/thread_yield_demo",
+    "apps/sync_spin_demo",
 ]
+
+# Dev `os` crate: fewer rustc checks; build-std (core/alloc) still needs RUSTFLAGS (see os/Makefile.toml).
+[profile.dev.package.os]
+debug-assertions = false

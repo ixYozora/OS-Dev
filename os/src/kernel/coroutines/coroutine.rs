@@ -127,9 +127,7 @@ impl Coroutine {
     /// May only be called once.
     pub fn start(&mut self) {
         /* Hier muss Code eingefuegt werden */
-        unsafe {
-            coroutine_start(self.stack_ptr);
-        }
+        coroutine_start(self.stack_ptr);
     }
 
     /// Switch to the next coroutine.
